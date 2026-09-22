@@ -6,11 +6,11 @@ WHY:  **Split out of `cli.py` at the 200-line cap, and it is the right seam.** `
       arguments and dispatches; this owns one command, including the one decision in it that is not
       mechanical -- what the banner is allowed to claim.
 
-      **THE WORK CALLBACK CALLS `deliver()`, AND THIS PARAGRAPH SAID OTHERWISE FOR MONTHS.** It
-      clones on receipt, ranks, renders and posts. The banner was corrected when the drift was
-      found by reading a running container's log -- see the comment above it -- but these two
-      docstrings were not, so the file went on describing an inert endpoint while shipping a live
-      one. A docstring is the first thing a reader trusts and the last thing a test reads.
+      **THE WORK CALLBACK CALLS `review_pull_request()`, AND THIS PARAGRAPH SAID OTHERWISE FOR
+      MONTHS.** It clones on receipt, ranks, renders and posts. The banner was corrected when the
+      drift was found by reading a running container's log -- see the comment above it -- but these
+      two docstrings were not, so the file went on describing an inert endpoint while shipping a
+      live one. A docstring is the first thing a reader trusts and the last thing a test reads.
 
       **The secret is read here, from the environment, and is deliberately absent from `Settings`**
       -- so it cannot reach `quantamind config` and be printed into a terminal scrollback or a CI
@@ -48,7 +48,7 @@ def run(port: int, host: str = "127.0.0.1") -> int:
     from quantamind.ingest.diff import DiffReadFailed
     from quantamind.ingest.publish.github_comments import CommentFailed
     from quantamind.serve.http.bind import build
-    from quantamind.serve.review.review_delivery import deliver
+    from quantamind.serve.review.gate import review_pull_request
     from quantamind.serve.webhook_github import MisconfiguredSecret
     from quantamind.serve.working_clone import CloneFailed
     from quantamind.types.forge.delivery import Review
@@ -73,7 +73,7 @@ def run(port: int, host: str = "127.0.0.1") -> int:
         # it has been named. What is NOT allowed is a bare except that turns a broken pipeline into
         # a quiet 202, which is indistinguishable from a working one.
         try:
-            done = deliver(review.repo, review.number, review.head_sha, settings)
+            done = review_pull_request(review, settings)
         except (CloneFailed, CommentFailed, DiffReadFailed) as exc:
             print(f"[serve] {review.repo}#{review.number} FAILED: {exc}", flush=True)
             raise

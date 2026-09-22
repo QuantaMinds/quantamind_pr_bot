@@ -1,9 +1,9 @@
 """The join: a verified delivery becomes a clone, a ranking, and a comment on the pull request.
 
-WHAT: `deliver(review, settings)` clones or fetches the repository, asks GitHub what the pull
-      request changed and what it was opened against, runs the ranking, and posts the comment --
-      or, with posting off, prints exactly what it would have posted. Returns a `Delivered` naming
-      which of six outcomes occurred.
+WHAT: `deliver(repo, number, head_sha, settings)` clones or fetches the repository, asks GitHub
+      what the pull request changed and what it was opened against, runs the ranking, and posts
+      the comment -- or, with posting off, prints exactly what it would have posted. Returns a
+      `Delivered` naming which outcome occurred.
 WHY:  **THE ENDPOINT AUTHENTICATED DELIVERIES AND REVIEWED NOTHING.** `run_endpoint.work()` logged
       "NOT REVIEWED: no pipeline is attached to this callback" and returned. Every piece existed --
       `review()` ranks and renders, `changed_files()` and `base_commit()` read the pull request,
@@ -28,7 +28,8 @@ WHY:  **THE ENDPOINT AUTHENTICATED DELIVERIES AND REVIEWED NOTHING.** `run_endpo
 IMPORTS: ingest.{diff,github_api,github_comments}, serve.{commands.run_review,working_clone},
       types.settings.
       Rightmost layer.
-CONSUMED BY: `serve/commands/run_endpoint.py`.
+CONSUMED BY: `serve/review/gate.py`, which decides BEFORE this runs whether the pull request may
+      be reviewed and how fully — this function no longer reads the installation or the seat.
 """
 
 from __future__ import annotations
@@ -40,7 +41,6 @@ from quantamind.infer.change_review import explain
 from quantamind.ingest.diff import base_commit, changed_files
 from quantamind.ingest.github_api import token_for
 from quantamind.ingest.publish.github_reviews import publish
-from quantamind.render.not_entitled import not_entitled
 from quantamind.serve.commands.run_review import review as run_ranking
 from quantamind.serve.review.change_facts import gather
 from quantamind.serve.review.deep_review import examine
@@ -49,16 +49,17 @@ from quantamind.serve.review.pin_review import pins_for
 from quantamind.serve.review.review_body import body_for
 from quantamind.serve.review.standards_step import applied
 from quantamind.serve.working_clone import ensure, sweep
-from quantamind.store import installations, tenancy
+from quantamind.store import tenancy
 from quantamind.store.reviews import bank
-from quantamind.store.schema import open_store
 from quantamind.types.change import REVIEWABLE_SUFFIXES
 from quantamind.types.review import Delivered, Outcome
 from quantamind.types.settings import Settings
 from quantamind.types.spend import Spend
 
 
-def deliver(delivery_repo: str, number: int, head_sha: str, settings: Settings) -> Delivered:
+def deliver(
+    delivery_repo: str, number: int, head_sha: str, settings: Settings, footer: str = ""
+) -> Delivered:
     """Run the pipeline for one pull request and post, or rehearse posting.
 
     Takes the three fields rather than the `Review` record so this never imports the webhook
@@ -70,26 +71,6 @@ def deliver(delivery_repo: str, number: int, head_sha: str, settings: Settings) 
     # every test passed, because a developer's machine has a credential helper and a container
     # does not. The token is minted only when an App is configured: an endpoint without one can
     # still read public repositories, and `token_for` would refuse rather than return nothing.
-    # **THE SEAT IS READ BEFORE THE CLONE, AND THAT ORDER IS NOT AN OPTIMISATION.** It ran after,
-    # so a repository we were about to refuse was cloned first — a full copy of somebody's private
-    # source pulled onto our disk and kept, for a review we then declined to do. `pricing.md`
-    # promises "one working copy of your repository... used for reviewing and nothing else", and a
-    # clone of a repository we refused makes that false. `entitled()` needs only the name.
-    seat_conn = open_store(tenancy.shared(Path(settings.database_path), tenancy.ACCOUNTS))
-    try:
-        seat = installations.entitled(seat_conn, delivery_repo)
-    finally:
-        seat_conn.close()
-    if not seat.may_review:
-        # **A REFUSAL IS POSTED, NOT SWALLOWED.** Returning silently made "we will not review this"
-        # and "there was nothing to say" the same blank space -- the defect this product exists to
-        # refuse, committed by it. `seat.why()` names the rule and the comment names the way past.
-        print(f"[serve] {delivery_repo} #{number}: not reviewed — {seat.why()}", flush=True)
-        body = not_entitled(seat.why())
-        if settings.posting_enabled:
-            publish(delivery_repo, number, head_sha, body, ())
-        return Delivered(Outcome.NOT_ENTITLED, (), (), body)
-
     app = bool(settings.app_id and settings.app_key_path)
     clone = ensure(
         delivery_repo,
@@ -170,10 +151,12 @@ def deliver(delivery_repo: str, number: int, head_sha: str, settings: Settings) 
 
     parts = (part.spend for part in (told, examined) if part is not None)
     bank(store, delivery_repo, number, head_sha, Spend.total(*parts))
+    # Whether a model answered: what decides if a reserved credit is kept (`serve/review/gate.py`).
+    consulted = (examined is not None and examined.consulted) or told is not None
 
     if reviewed.body is None and not pins:
         quiet = Outcome.NO_READABLE_FILES if not reviewed.considered else Outcome.NOTHING_TO_SAY
-        return Delivered(quiet, reviewed.considered, reviewed.skipped, None)
+        return Delivered(quiet, reviewed.considered, reviewed.skipped, None, consulted)
 
     kept = examined.anchored if examined is not None else ()
     spoken = body_for(
@@ -186,10 +169,10 @@ def deliver(delivery_repo: str, number: int, head_sha: str, settings: Settings) 
         facts=facts,
         inherited=inherited,
     )
-    body = (spoken if spoken is not None else (reviewed.body or "")) + pins
+    body = (spoken if spoken is not None else (reviewed.body or "")) + pins + footer
 
     if not settings.posting_enabled:
-        return Delivered(Outcome.REHEARSED, reviewed.considered, reviewed.skipped, body)
+        return Delivered(Outcome.REHEARSED, reviewed.considered, reviewed.skipped, body, consulted)
 
     wrote = publish(delivery_repo, number, head_sha, body, kept)
     return Delivered(
@@ -197,4 +180,5 @@ def deliver(delivery_repo: str, number: int, head_sha: str, settings: Settings) 
         reviewed.considered,
         reviewed.skipped,
         reviewed.body,
+        consulted,
     )

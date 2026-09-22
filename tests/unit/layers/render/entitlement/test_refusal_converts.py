@@ -1,18 +1,16 @@
-"""The refusal a private repository gets, which is the first thing every paying customer sees.
+"""What a pull request is told when it is not reviewed — one true sentence per reason.
 
-WHAT: `render/not_entitled.not_entitled`, asserting it explains, offers a way forward, and says
-      nothing about how the product works.
-WHY:  **THIS IS NOW THE PRODUCT'S MAIN SALES SURFACE, NOT AN ERROR PAGE.** The free tier covers
-      public repositories, so every customer who could ever pay arrives here first. It used to say
-      "a paid plan removes the eligibility rules entirely; the free tier is the one with conditions
-      on it" — accurate, unlinked, and written for whoever wrote the rule rather than the developer
-      reading it on their pull request.
+WHAT: `render/not_entitled.{refusal,seat_footer}` for every refusal reason billing can return.
+WHY:  **THIS IS THE PRODUCT'S MAIN SALES SURFACE, NOT AN ERROR PAGE.** Every developer on an account
+      that has not paid, or has run out of seats or credits, arrives here first.
 
-      **AND IT IS STILL A CUSTOMER-FACING COMMENT**, so `docs/product/comment-golden-rules.md`
-      applies to it exactly as it applies to a review: never mention our method. A refusal that
-      leaked "ranked" or "history" would leak it to the population most likely to be evaluating us
-      against a competitor.
-IMPORTS: quantamind.render.not_entitled.
+      **THE FIRST VERSION SAID THE SAME THING UNDER EVERY REASON** — "private repositories are on a
+      paid plan" — including for a removed installation and a repository with too few stars. So
+      each reason is asserted to carry its OWN fix and not another reason's.
+
+      **IT IS STILL A CUSTOMER-FACING COMMENT**, so `docs/product/comment-golden-rules.md` applies:
+      never mention our method.
+IMPORTS: pytest, quantamind.render.not_entitled, quantamind.types.admission.decision.
 CONSUMED BY: `just check`.
 """
 
@@ -20,39 +18,84 @@ from __future__ import annotations
 
 import pytest
 
-from quantamind.render.not_entitled import PRICING, not_entitled
-
-WHY = "installed on the free tier, NOT eligible: the repository is private"
-
-
-def test_it_says_what_happened_and_why() -> None:
-    body = not_entitled(WHY)
-
-    assert "was not reviewed" in body
-    assert "private" in body
+from quantamind.render.not_entitled import ACCOUNT, PRICING, refusal, seat_footer
+from quantamind.types.admission.decision import Admission, Mode
 
 
-def test_it_carries_a_way_forward() -> None:
-    """A refusal with no next step is a dead end, and this one is reached by every buyer."""
-    body = not_entitled(WHY)
+def refused(reason: str, **over: object) -> Admission:
+    fields: dict[str, object] = {
+        "author_login": "carol",
+        "seats_used": 2,
+        "seats_included": 2,
+        "resets_at": "2026-11-01T00:00:00.000Z",
+    }
+    fields.update(over)
+    return Admission(Mode.REFUSED, reason, **fields)  # type: ignore[arg-type]
 
-    assert PRICING in body
-    assert "14-day trial" in body
+
+REASONS = ["private_needs_plan", "seat_full", "no_credits", "byok_key_missing"]
 
 
-def test_it_does_not_claim_the_code_is_fine() -> None:
+def test_each_reason_gives_its_own_way_forward_and_not_another_one() -> None:
+    bodies = {reason: refusal(refused(reason)) for reason in REASONS}
+
+    assert PRICING in bodies["private_needs_plan"] and ACCOUNT not in bodies["private_needs_plan"]
+    assert "does not have a QuantaMind seat" in bodies["seat_full"]
+    assert "used all of its review credits" in bodies["no_credits"]
+    assert "Gemini API key" in bodies["byok_key_missing"]
+    # The defect this replaced: one reason's sentence appearing under another.
+    assert all("private repositories are on a paid plan" not in bodies[r] for r in REASONS[1:])
+
+
+def test_a_seat_refusal_names_the_developer_and_the_count() -> None:
+    body = refusal(refused("seat_full", author_login="carol", seats_used=5, seats_included=5))
+
+    assert "@carol does not have a QuantaMind seat" in body
+    assert "5 seat(s) and all 5 are in use" in body
+
+
+def test_an_account_level_refusal_names_nobody() -> None:
+    """No plan, no credits and no key are the account's problem, not the author's."""
+    names = [
+        r
+        for r in ("private_needs_plan", "no_credits", "byok_key_missing")
+        if "@carol" in refusal(refused(r))
+    ]
+
+    assert names == []
+
+
+def test_the_credit_refusal_says_when_it_resets_in_words() -> None:
+    body = refusal(refused("no_credits", resets_at="2026-11-01T00:00:00.000Z"))
+
+    assert "resets on 1 November 2026" in body
+
+
+def test_every_refusal_says_nothing_was_read() -> None:
     """Silence and approval must never look alike — the defect this product exists to refuse."""
-    body = not_entitled(WHY)
-
-    assert "nothing was read" in body
+    assert [r for r in REASONS if "nothing was read" not in refusal(refused(r))] == []
 
 
 @pytest.mark.parametrize("leak", ["rank", "history", "budget", "decile", "percentile", "top three"])
-def test_it_never_mentions_our_method(leak: str) -> None:
-    assert leak not in not_entitled(WHY).lower()
+def test_no_refusal_mentions_our_method(leak: str) -> None:
+    assert [r for r in REASONS if leak in refusal(refused(r)).lower()] == []
+
+
+def test_an_unknown_reason_is_named_rather_than_dressed_as_a_known_one() -> None:
+    body = refusal(refused("something_new"))
+
+    assert "could not be reviewed (something_new)" in body
 
 
 def test_an_empty_reason_is_refused() -> None:
-    """A refusal that does not say why is the thing this module exists to prevent."""
-    with pytest.raises(ValueError):
-        not_entitled("   ")
+    with pytest.raises(ValueError, match="must carry its reason"):
+        refusal(refused("   "))
+
+
+def test_the_free_review_footer_names_who_needs_a_seat() -> None:
+    footer = seat_footer(
+        Admission(Mode.FREE, "seat_full_public", author_login="bob", seats_used=3, seats_included=3)
+    )
+
+    assert "@bob does not have a QuantaMind seat (3 of 3 in use)" in footer
+    assert ACCOUNT in footer

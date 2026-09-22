@@ -24,27 +24,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from quantamind.serve.review import review_delivery
-from quantamind.store import installations, schema, tenancy
+from quantamind.serve.review import gate, review_delivery
+from quantamind.types.forge.delivery import Review
+from quantamind.types.review import Outcome
 from quantamind.types.settings import Settings
 
 
 def test_a_refused_repository_is_never_cloned(tmp_path: Path, monkeypatch: Any) -> None:
+    """A private repository on an account with no plan: refused BEFORE anything is fetched.
+
+    The refusal is now decided by `serve/review/gate.py`, ahead of `deliver()`, so the ordering is
+    asserted there. Billing is unconfigured, so the cached plan decides — and there is none.
+    """
     root = tmp_path / "stores"
     root.mkdir()
-    conn = schema.open_store(tenancy.shared(root, tenancy.ACCOUNTS))
-    try:
-        installations.record(
-            conn,
-            "acme",
-            "acme/secret",
-            at=1_700_000_000,
-            eligible=False,
-            reasons=("the repository is private; the free tier is public repositories only",),
-        )
-    finally:
-        conn.close()
-
     cloned: list[str] = []
 
     def _never(repo: str, *args: Any, **kwargs: Any) -> Path:
@@ -53,13 +46,11 @@ def test_a_refused_repository_is_never_cloned(tmp_path: Path, monkeypatch: Any) 
 
     monkeypatch.setattr(review_delivery, "ensure", _never)
 
-    done = review_delivery.deliver(
-        "acme/secret",
-        7,
-        "deadbeef",
+    done = gate.review_pull_request(
+        Review("acme/secret", 7, "deadbeef", author_id="1", author_login="alice", private=True),
         Settings(database_path=str(root), clone_root=str(tmp_path / "clones")),
     )
 
     assert cloned == [], "a repository we refused was cloned anyway"
-    assert done.outcome is review_delivery.Outcome.NOT_ENTITLED
-    assert "private" in (done.body or ""), "the refusal did not say why"
+    assert done.outcome is Outcome.NOT_ENTITLED
+    assert "private repositories are on a paid plan" in (done.body or "")

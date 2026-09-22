@@ -101,6 +101,11 @@ class Settings:
     secret is read in `serve/commands/run_endpoint.py` rather than stored: a credential in a
     settings object reaches a log or a config dump the first time anybody prints one."""
 
+    billing_url: str = ""
+    """The billing service asked on every pull request (`POST /billing/review/authorize`).
+    **Empty is not "free for everyone"**: it means the cached entitlement decides, exactly as when
+    the service is unreachable. The bearer is read at use, never held here."""
+
     posting_enabled: bool = False
     """**False on purpose, and it is the one default that writes to somebody else's project.**
     With it off the endpoint runs the whole pipeline and prints the comment it would have posted,
@@ -166,6 +171,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         oauth_client_secret=source.get(PREFIX + "OAUTH_CLIENT_SECRET", ""),
         public_read_token=source.get(PREFIX + "PUBLIC_READ_TOKEN", ""),
         inference_project=source.get(PREFIX + "INFERENCE_PROJECT", ""),
+        billing_url=source.get(PREFIX + "BILLING_URL", ""),
         # **`or`, NOT A `get` DEFAULT.** `QUANTAMIND_GCLOUD_PATH=` — set but empty, which is
         # what commenting a line out in a `.env` produces — returns "" from `get`, and
         # `subprocess.run([""])` then fails with something that names no cause. Found by this

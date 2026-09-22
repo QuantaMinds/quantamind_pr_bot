@@ -64,11 +64,14 @@ class Destination(Enum):
     PACKAGE_INDEX = "package_index"
     """PyPI and friends, read by the release oracle to check a version claim."""
 
-    # **THERE IS NO `PAYMENTS` DESTINATION, AND ITS ABSENCE IS THE POINT.** This service made
-    # outbound calls to Stripe until the billing service took ownership of that relationship; it
-    # is now TOLD what an account holds over an inbound `POST /entitlement` and initiates nothing.
-    # A destination nothing reaches would read as a capability this deployment has, which is the
-    # opposite of what this enum is for. See `docs/engineering/STRIPE.md`.
+    BILLING = "billing"
+    """OUR billing service, asked on every pull request whether its author holds a seat and a
+    credit. **NOT A PAYMENT PROCESSOR** — this service still never speaks to Stripe; the billing
+    service does, and answers here in our own vocabulary. See `docs/engineering/STRIPE.md`.
+
+    **AIR-GAPPED REFUSES IT, AND THAT IS SAFE.** A refused call falls back to the entitlement the
+    billing service last pushed, read by `verify/paid_access.decide`, exactly as when the service
+    is down — so an air-gapped paying customer is still reviewed, unmetered."""
 
     NOTIFICATIONS = "notifications"
     """Transactional email, through Resend. Outbound only; nothing arrives back on this route.

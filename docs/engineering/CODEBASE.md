@@ -4531,11 +4531,39 @@ carried no period end at all until 2026-09-18, so every account looked like one 
 which reads as permanently paid, and made `STALE_RECORD` unreachable. Found by running a real
 sandbox subscription through the whole path rather than by reading either side.
 
-**`may_review` IS NOT WIRED TO THIS, AND THAT IS A DECISION.** `store/installations.py:
-Entitlement.may_review` is unchanged: the state is recorded and reported and does not yet gate a
-review. The gate is one line and its blast radius is every paying customer, so the honest order is
-to record the state, watch it agree with Stripe's dashboard on real deliveries, and close the gate
-in a change that can be reverted alone.
+**It is the FALLBACK, not the gate.** Pull requests are admitted through the billing service
+(see "Per-pull-request admission" below). `paid_access.decide` decides only when billing cannot be
+reached, on the plan billing last pushed — and billing's `admission.ts` applies the same rule
+(`GRACE_DAYS` = 7 on both sides), so an account is open or shut the same way whether we are up.
+
+### Per-pull-request admission — seats and credits, like CodeRabbit and Greptile
+
+Every pull request is decided BEFORE anything is cloned:
+
+| module | owns |
+|---|---|
+| `serve/pull_request_event.py` | reads the delivery into a `Review`, including the author's GitHub **id**, whether they are a bot (GitHub's own `user.type`), and the repository's visibility — **missing visibility reads as private** |
+| `ingest/billing/review_gate.py` | `POST /billing/review/authorize` and `/settle` to our billing service, 5 s timeout, `permit(Destination.BILLING)` first. `BillingUnreachable` (no answer) is distinct from `BillingRefused` (an answer we cannot use: a misconfiguration) |
+| `types/admission/` | `Admission` (FULL / FREE / REFUSED, the reason code, the reservation) and `ModelRoute` (`OurVertex` or the customer's `GeminiKey`, whose `repr` never shows the key) |
+| `serve/review/admission.py` | `admit()`: asks billing, carries its answer; on no answer falls back to the cached plan via `paid_access`, reviewing a paying account **in full and unmetered** |
+| `serve/review/gate.py` | `review_pull_request()`: admit, then refuse / free review / full review, and **settle on every exit** — only a review that reached someone and consulted a model keeps its credit |
+| `serve/review/refusal.py` | posts the refusal comment and a `success` status whose description names why — never an absent status, which deadlocks a required check |
+| `render/not_entitled.py` | one true sentence per refusal reason; names the author only when the fix is about them |
+
+**Billing decides; the reviewer carries the answer.** Seats and credits must be counted
+atomically across concurrent pull requests, which a SQLite file on a lock-free mount cannot do.
+
+**A free review is the same pipeline with inference switched off** (`dataclasses.replace(settings,
+inference_enabled=False)`), so no step can forget to skip the model.
+
+**Known and accepted:** a review that crashes is refunded, and if GitHub then redelivers it, billing
+finds the commit's debit already recorded — so the retry runs free. It errs in the customer's
+favour, by one review, only after a crash.
+
+**Still in place and no longer deciding reviews:** `verify/qualification.qualifies()` (stars,
+contributors, one free repo per account, 40 slots) runs at install time to choose which repositories
+to pre-warm, and on `/provision`. `store/installations.Entitlement.may_review` has no caller. Both
+are follow-ups; removing them touches `verify/` and the provisioning routes.
 
 ### `verify/tier_request.py` — the tripwire that was narrowed rather than removed
 

@@ -154,9 +154,8 @@ class Outcome(enum.Enum):
     NOTHING_TO_SAY = "ranked, and no file stood out enough to be worth a comment"
     NO_READABLE_FILES = "every changed file is in a language this product does not read"
     NO_FILES = "the pull request changed no files we could read from the API"
-    NOT_ENTITLED = "the installation was removed; nothing was reviewed"
-    """B5. **A SEVENTH VALUE, NOT A FLAG ON ANOTHER**: folding "we chose not to review" into
-    "there was nothing to review" hides a withdrawn customer among unreadable pull requests."""
+    NOT_ENTITLED = "not reviewed — billing refused it, and the comment says why"
+    """**A SEVENTH VALUE, NOT A FLAG**: "we chose not to review" is not "nothing to review"."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +166,7 @@ class Delivered:
     considered: tuple[str, ...]
     skipped: tuple[str, ...]
     body: str | None
+    consulted: bool = False  # a model answered; a reserved credit is refunded when False
 
     def sentence(self) -> str:
         """One line for the log, stating what happened and what it was computed from."""
