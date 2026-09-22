@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts" / "guard" / "records"))
 
 from check_documented_recipes import BACKTICKED, JUST_CALL, QM_CALL, main  # noqa: E402
+from declared_commands import CLI  # noqa: E402
 
 # The sentence that broke it: three spans, the middle two adjacent across ordinary prose.
 POINTER = (
@@ -43,7 +44,10 @@ POINTER = (
 def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prose: str) -> int:
     """Scan a one-document project whose justfile has `fixtures` and whose CLI has `config`."""
     (tmp_path / "justfile").write_text("fixtures:\n    echo pinned\n", encoding="utf-8")
-    cli = tmp_path / "src" / "quantamind" / "serve" / "cli.py"
+    # **THE PATH COMES FROM THE GUARD, NOT FROM A COPY OF IT.** This fixture hard-coded
+    # `serve/cli.py`; when the parser moved to `serve/arguments.py` the fixture kept writing a
+    # file the guard no longer reads, and a guard with no subject reports nothing wrong.
+    cli = tmp_path / CLI
     cli.parent.mkdir(parents=True)
     cli.write_text(
         'UNBUILT: dict[str, str] = {"serve": "not built"}\n'
@@ -146,3 +150,21 @@ def test_a_marker_on_a_subcommand_the_cli_itself_calls_unbuilt_is_still_required
     prose = "Run `quantamind serve` to bind. documented-command:unbuilt"
     assert _run(tmp_path, monkeypatch, prose) == 0
     assert "marker is stale" not in capsys.readouterr().out
+
+
+def test_a_project_with_no_parser_module_raises_rather_than_reporting_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**THE KNOWN-ANSWER TEST FOR THE GUARD LOSING ITS SUBJECT.**
+
+    `cli_commands` used to return two empty sets when `CLI` named no file, and this is the
+    sabotage that tells that apart from a genuine "nothing is wrong": move the parser, and with
+    the old fallback every documented command is reported unregistered while a renamed one is
+    never checked at all. Neither outcome says the guard read nothing. Now it raises by name.
+    """
+    from declared_commands import ParserMoved, cli_commands
+
+    (tmp_path / "justfile").write_text("fixtures:\n    echo pinned\n", encoding="utf-8")
+
+    with pytest.raises(ParserMoved, match="does not exist at"):
+        cli_commands(tmp_path)

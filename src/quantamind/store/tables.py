@@ -118,7 +118,8 @@ TABLES: tuple[str, ...] = (
     # B3. One row per subscription, written ONLY from an authenticated Stripe delivery.
     # **`standing` IS A NAME AND NOT A BOOLEAN**: "they cancelled" and "their card failed on
     # Tuesday" need different answers from us, and a column that cannot tell them apart forces a
-    # guess at exactly the moment a customer is deciding whether to stay. -> `types/billing.py`.
+    # guess at exactly the moment a customer is deciding whether to stay. **NOTHING WRITES IT NOW**
+    # -> "The schema, and one table nothing writes" in `docs/engineering/CODEBASE.md`.
     # **`event_at` IS STRIPE'S TIMESTAMP AND IT IS LOAD-BEARING.** Stripe does not guarantee
     # delivery order, so `store/subscriptions.record` refuses to let an older event overwrite a
     # newer one. Without this column that comparison cannot be made and a redelivered `canceled`

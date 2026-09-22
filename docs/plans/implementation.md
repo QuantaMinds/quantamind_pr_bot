@@ -47,7 +47,7 @@ three months stale.
 | `infer/` | **8** | `change_review.py`, `change_summary.py`, `diff_cap.py`, `gemini.py`, `history_digest.py`, `prompt_once.py`, `summary_prompt.py`, `vertex.py` |
 | `verify/` | **15** | `anchor.py`, `blocking.py`, `consumers.py`, `external_facts.py`, `judged_rule.py`, `paid_access.py`, `pin_check.py`, `pin_mismatch.py`, `publishable.py`, `qualification.py`, `release_claims.py`, `releases.py`, `repeats.py`, `rule_check.py`, `tier_request.py` |
 | `render/` | **13** | `audit_export.py`, `comment.py`, `compliance_table.py`, `config.py`, `dashboard.py`, `deep_report.py`, `json_report.py`, `mined_rules.py`, `not_entitled.py`, `page.py`, `replay_report.py`, `scan_report.py`, `speaks.py` |
-| `serve/` | **9** | `blocking_status.py`, `cli.py`, `health.py`, `listener.py`, `retrospective.py`, `rule_judge.py`, `settle.py`, `webhook_github.py`, `working_clone.py` |
+| `serve/` | **10** | `arguments.py`, `blocking_status.py`, `cli.py`, `health.py`, `listener.py`, `retrospective.py`, `rule_judge.py`, `settle.py`, `webhook_github.py`, `working_clone.py` |
 
 <!-- plan-state:end -->
 

@@ -1,132 +1,34 @@
 """The command line: the same pipeline, invoked locally, posting nothing.
 
-WHAT: `main()` and the argument parser behind `uv run quantamind`. `config` prints the resolved
-      settings, `retrospective` replays the ranker over a clone's own history, `serve` binds the
-      webhook endpoint, and `review` ranks one change from a clone and prints what we would say.
-      The commands still unbuilt are registered by the loop at the end of `build_parser`, which
-      is also what `check_documented_recipes.py` reads to decide which ones the docs may call
-      unbuilt -- so this docstring must never carry that list a second time.
+WHAT: `main()`, which is one dispatch table. `config` prints the resolved settings,
+      `retrospective` replays the ranker over a clone's own history, `serve` binds the webhook
+      endpoint, `review` ranks one change from a clone and prints what we would say, `reconcile`
+      asks the forge what an installation still covers, and `email` sends one message through
+      Resend. **The surface itself -- every flag, and the list of
+      commands that are registered but unbuilt -- moved to `serve/arguments.py`** when this file
+      hit the 200-line cap and `email` could not be added to it.
 WHY:  The CLI is not a convenience. It runs the retrospective, it is how a sceptic verifies
       us before granting repository access, and it is what answers the ranker gate. So it is
       built first and stays. The App is this plus a webhook, a signature check and
       idempotency -- and the pipeline must not know which one called it, or what a customer
       verified here is not what runs there.
-IMPORTS: stdlib (argparse, pathlib) and types.settings at module scope. Every command's
-      implementation is imported INSIDE the branch that needs it, so `--version` and `config`
-      still answer when a layer below is broken. The branch that chooses between them moved to
-      `serve/commands/dispatch.py` when `reconcile` pushed this file over the cap.
+IMPORTS: stdlib argparse and `serve.arguments` plus `types.settings` at module scope. Every
+      command's implementation is imported INSIDE the branch that needs it, so `--version` and
+      `config` still answer when a layer below is broken.
 CONSUMED BY: the `quantamind` entry point in pyproject.toml, and tests/unit.
 """
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Sequence
-from pathlib import Path
 
-from quantamind import __version__
-from quantamind.serve.commands import dispatch
+from quantamind.serve.arguments import UNBUILT, build_parser
 from quantamind.types.settings import SettingsError, load
 
-# Commands named in AGENTS.md that have no implementation behind them yet. They parse and
-# exit non-zero with the stage that will deliver them, rather than exiting 0 having done
-# nothing -- a documented command that silently succeeds is how a runbook comes to report
-# work it never did.
-UNBUILT: dict[str, str] = {}
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="quantamind",
-        description="A code reviewer that reports what it did not check.",
-    )
-    parser.add_argument("--version", action="version", version=__version__)
-    subparsers = parser.add_subparsers(dest="command")
-
-    subparsers.add_parser("config", help="print the resolved configuration and exit")
-    subparsers.add_parser("migrate", help="bring an existing store up to this build's schema")
-    mend = subparsers.add_parser(
-        "reconcile", help="ask the forge what it still covers; withdraw what it no longer lists"
-    )
-    mend.add_argument("--account", default="", help="one account; default is every live one")
-    show = subparsers.add_parser(
-        "dashboard", help="what we commented on, whether it merged, what production said"
-    )
-    show.add_argument("repo", help="owner/name, as recorded")
-    show.add_argument("--limit", type=int, default=100)
-    # **D1d: PROPOSES, NEVER DECLARES.** The pull requests are named rather than crawled — this
-    # product has never run a "recent changes" search and will not pretend to here.
-    mined = subparsers.add_parser(
-        "standards", help="what reviewers of these pull requests said more than once"
-    )
-    mined.add_argument("--repo", required=True, help="owner/name on GitHub")
-    mined.add_argument(
-        "--pulls", type=int, nargs="+", required=True, metavar="N", help="pull request numbers"
-    )
-    rules = subparsers.add_parser(
-        "compliance", help="every declared rule and what happened to it, per repository"
-    )
-    rules.add_argument("--repo", required=True, help="owner/name as recorded in the store")
-    # **AN ARTEFACT, NOT A QUERY.** D4b claimed "exportable" while only a summary could be read
-    # out; a compliance team is handed a file, and the file carries its own limits.
-    rules.add_argument(
-        "--export",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="write the whole audit trail to PATH as JSON, with what it does not cover stated",
-    )
-
-    money = subparsers.add_parser(
-        "cost", help="what this repository's reviews spent, from the rows that recorded it"
-    )
-    money.add_argument("--repo", required=True, help="owner/name as recorded in the store")
-
-    listen = subparsers.add_parser(
-        "serve", help="authenticate and de-duplicate GitHub webhooks over HTTP"
-    )
-    listen.add_argument("--port", type=int, default=7331)
-    # **`--host` MUST BE ASKED FOR.** Loopback by default so a developer does not expose an
-    # endpoint to their network by omission; the container passes 0.0.0.0 deliberately.
-    listen.add_argument("--host", default="127.0.0.1", help="bind address; 0.0.0.0 in a container")
-    look = subparsers.add_parser(
-        "review", help="rank one change's files against history and print what we would say"
-    )
-    look.add_argument("clone", type=Path, help="a full clone; nothing is sent anywhere")
-    look.add_argument("--repo", default="local/clone", help="owner/name, for the store key")
-    look.add_argument(
-        "--sha",
-        default="",
-        help="the commit to review. Omit it to review what you have NOT committed yet, or "
-        "the commits on this branch that are not on the default one — which is the review "
-        "worth having before you open a pull request",
-    )
-    # **SUPPRESSED FROM `--help`, NOT REMOVED, AND OFF UNLESS ASKED FOR BY NAME.**
-    # `docs/product/QUANTAMIND.md` says the product publishes no model findings. A flag advertised
-    # in `--help` contradicts that document, and a CLI quietly offering what the canonical document
-    # says is not shipped is precisely the drift this project spends its time catching.
-    #
-    # It stays because the measurement half needs it: raw findings are **66.7-82.1% wrong** at
-    # **0.013-0.037 correct per pull request**, and the parser gate in front of it has adjudicated
-    # exactly ONE live finding — which it dropped. That is not a capability to put in front of a
-    # customer; it is an instrument for finding out whether it could ever be one.
-    look.add_argument(
-        "--json", action="store_true", dest="as_json", help="print the review as JSON for a tool"
-    )
-    look.add_argument("--deep", metavar="GCP_PROJECT", default="", help=argparse.SUPPRESS)
-    first = subparsers.add_parser("scan", help="walk a clone's history; say where rework lands")
-    first.add_argument("clone", type=Path, help="a full clone; nothing is sent unless asked")
-    first.add_argument("--explain", metavar="GCP_PROJECT", default="", help=argparse.SUPPRESS)
-    walk = subparsers.add_parser(
-        "retrospective", help="replay the ranker over a clone's own history and report"
-    )
-    walk.add_argument(
-        "clone", type=Path, nargs="+", help="one or more full clones; nothing is sent anywhere"
-    )
-    walk.add_argument("--repo", default="local/clone", help="owner/name, for the report heading")
-    for name, stage in UNBUILT.items():
-        subparsers.add_parser(name, help=f"NOT BUILT — arrives with {stage}")
-    return parser
+__all__ = ["UNBUILT", "build_parser", "main"]
+"""**`build_parser` AND `UNBUILT` STAY IMPORTABLE FROM HERE.** Tests and a guard already reach
+for them at this name, and the question they answer -- what does the CLI accept -- did not change
+because the definition moved file."""
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -146,9 +48,64 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    handled = dispatch.run(args)
-    if handled is not None:
-        return handled
+    if args.command == "serve":
+        from quantamind.serve.commands.run_endpoint import run
+
+        return run(args.port, args.host)
+
+    if args.command == "review":
+        from quantamind.serve.commands.run_commit import review_commit
+
+        return review_commit(
+            args.clone, args.repo, args.sha, deep_project=args.deep, as_json=args.as_json
+        )
+
+    if args.command == "scan":
+        from quantamind.serve.commands.run_scan import run_scan
+
+        return run_scan(args.clone, explain=args.explain)
+
+    if args.command == "retrospective":
+        from quantamind.serve.commands.run_retrospective import run_retrospective
+
+        return run_retrospective(args.clone, args.repo)
+
+    if args.command == "migrate":
+        from quantamind.serve.commands.run_migrate import run_migrate
+
+        return run_migrate()
+
+    if args.command == "reconcile":
+        from quantamind.serve.commands.run_reconcile import run_reconcile
+
+        return run_reconcile(args.account)
+
+    if args.command == "standards":
+        from quantamind.serve.commands.run_standards import run_standards
+
+        return run_standards(args.repo, args.pulls)
+
+    if args.command == "compliance":
+        from quantamind.serve.commands.run_report import run_compliance
+
+        return run_compliance(args.repo, args.export)
+
+    if args.command == "cost":
+        from quantamind.serve.commands.run_report import run_cost
+
+        return run_cost(args.repo)
+
+    if args.command == "email":
+        from quantamind.serve.commands.run_email import run_email
+
+        return run_email(
+            to=tuple(args.to), sender=args.sender, subject=args.subject, html=args.html
+        )
+
+    if args.command == "dashboard":
+        from quantamind.serve.commands.run_report import run_dashboard
+
+        return run_dashboard(args.repo, args.limit)
 
     try:
         settings = load()

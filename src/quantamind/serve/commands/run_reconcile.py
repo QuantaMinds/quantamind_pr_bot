@@ -13,7 +13,7 @@ WHY:  **IT IS A COMMAND RATHER THAN A TIMER INSIDE THE ENDPOINT** for the reason
       a silent failure here is a reconciliation that stops happening without anyone noticing —
       which is the same defect class the thing it reconciles exists to catch.
 IMPORTS: ingest.installation_scope, serve.reconcile, types.settings. Rightmost layer.
-CONSUMED BY: `serve/commands/dispatch.py`.
+CONSUMED BY: `serve/cli.py`.
 """
 
 from __future__ import annotations

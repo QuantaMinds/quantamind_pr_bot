@@ -805,15 +805,6 @@ would be indistinguishable from "our key is wrong". `AuthFailed` gained a `statu
 that confirmed everything both withdraw zero and both print a total; on a schedule the exit code is
 the only difference a human sees.
 
-### `serve/commands/dispatch.py` — which implementation a parsed command runs
-
-Split out when `reconcile` pushed `serve/cli.py` past the 200-line cap. The parser changes once per
-command; the branch chain grows every time, so they are different rates of change. **Every import
-stays inside its branch** — that is not tidiness, it is what keeps `quantamind config` answering
-when a layer below is broken, which is exactly when an operator reaches for it. `run()` returns
-`None` when nothing matched, because "no branch matched" is how `config` is reached and returning
-`0` would make an unknown command look like a successful one.
-
 ### `types/forge/` — what a forge told us, independent of which forge told us
 
 **`delivery.py` holds the four outcomes an authenticated delivery can carry:** `Review`,
@@ -2020,9 +2011,9 @@ cap did the thing it exists to do rather than being raised. The seams were alrea
 | new module | what it owns | split from |
 |---|---|---|
 | `records/claim_rules.py` | the two rules that judge one sentence against disk — absent-but-present, DONE-but-missing | `check_stage_table.py`, which ran them over two unrelated things (an evidence cell, a stage's steps) and read as though they belonged to one |
-| `records/declared_commands.py` | what the repository provides: justfile recipes, and the subcommands `serve/cli.py` registers | `check_documented_recipes.py`, leaving it owning only "does the prose agree" |
+| `records/declared_commands.py` | what the repository provides: justfile recipes, and the subcommands `serve/arguments.py` registers | `check_documented_recipes.py`, leaving it owning only "does the prose agree" |
 
-**The unbuilt set is still read from `cli.py` and never listed in a guard.** A hand-kept list of
+**The unbuilt set is still read from `serve/arguments.py` and never listed in a guard.** A hand-kept list of
 unbuilt commands goes stale the moment one ships — which is precisely the defect the marker-expiry
 rule catches, and reintroducing it inside that guard would have been the joke writing itself.
 
@@ -4204,7 +4195,7 @@ every key the command names. The first version only validated whatever keys the 
 name — so renaming one in the command file made the check smaller and it passed. A check that
 admits less when the thing it guards is broken is not a check.
 
-**`--deep` stays out**, and that is tested rather than trusted: `serve/cli.py` suppresses it from
+**`--deep` stays out**, and that is tested rather than trusted: `serve/arguments.py` suppresses it from
 `--help` because `docs/product/QUANTAMIND.md` says the product publishes no model findings, and a
 slash command turning it on would be that drift with a friendlier entry point.
 
@@ -4416,6 +4407,79 @@ to assert the scoped behaviour — pruned under `research/`, walked under `src/`
 loosened to pass.
 
 ---
+## The CLI surface and outbound mail
+
+### `serve/arguments.py` and `serve/cli.py` — what the CLI accepts, and what it then does
+
+Split when `cli.py` reached exactly 200 lines and `email` could not be added to it. `arguments.py`
+owns `build_parser()` and `UNBUILT`; `cli.py` is one dispatch table that imports each command's
+implementation INSIDE the branch that needs it, so `--help`, `--version` and `config` still answer
+when a layer below is broken. `build_parser` and `UNBUILT` are re-exported from `cli.py`, because
+the question they answer did not change when the definition moved file.
+
+**The split silently inverted a guard, which is the thing worth recording here.**
+`records/declared_commands.py` reads `add_parser` calls out of the AST of one named file. After the
+move that file held none, so every documented command was reported unregistered — 30 violations
+against prose nobody had touched. It failed loudly only by luck: the same function returned two
+empty sets when the path did not exist at all, and an empty set of registered commands makes every
+"is this documented" check pass by having no subject. That fallback is now `ParserMoved`, raised by
+name, with `tests/unit/guards/test_documented_recipes_spans.py` holding the known-answer test for
+it — and the fixture in that file now takes the path from the guard instead of restating it.
+
+### `serve/commands/run_email.py` — `quantamind email`, and why the command exists at all
+
+| file | owns |
+|---|---|
+| `serve/commands/run_email.py` | `run_email()` — reads `RESEND_API_KEY` through `types/dotenv.credential`, sends one message, prints Resend's id or Resend's own sentence; exit 0 or 2 |
+
+**It exists so the credential is proven by running something.** Three secrets in `.env` were read
+by nothing — `run_endpoint.py` took them from `os.environ` while `from_file` deliberately does not
+touch it, so a configured file produced *"no webhook secret: refusing to bind"*. A fourth key with
+no command behind it would be the same defect with a new name.
+
+**A missing key names the variable and exits 2.** It does not exit 0 having done nothing, which is
+what `AGENTS.md` rule 15 is about. `env` is an injectable mapping so the unconfigured path is
+testable without sending mail — a test that fell through to the real `.env` would post a live
+message on every `just check` and pass or fail depending on whose laptop it ran on.
+
+**What could still silently fail:** nothing calls this except a person typing it. If a future
+caller sends mail automatically, the decision about when to send belongs at that caller, for the
+reason `ingest/publish/__init__.py` gives about `POSTING_ENABLED` — grouping does not gate.
+
+### `ingest/notify/` — the only outbound mail
+
+| file | owns |
+|---|---|
+| `ingest/notify/resend_api.py` | `send()` — one authenticated JSON POST to Resend, `permit()` first, raises on every non-2xx; `Sent` is the id Resend assigned plus the recipients we addressed; `KEY_VARIABLE` names the environment variable |
+
+**It sits apart from `ingest/publish/`** because that package is defined as the two surfaces this
+product writes to on GitHub. Mail is a third surface with a different provider, a different
+credential and a different egress argument, and widening `publish/` until it meant "outbound"
+would cost the sentence that makes its own contents readable off a directory listing.
+
+**It must not** take the `resend` SDK, for the reason this service never took Stripe's either:
+`pyproject.toml` declares `dependencies = []` and what this needs is a JSON POST with a bearer
+token. `tests/unit/layers/ingest/test_resend_request.py` exists because nothing else checks the
+body — Resend reads `from`, `to`, `subject` and `html`, and a body with the wrong key names does
+not error on our side.
+
+**It must not** open a socket without `types/deployment.permit(Destination.NOTIFICATIONS)`.
+Air-gapped refuses mail by name before the socket opens. On-prem permits it, which is a decision
+and the weaker case of the two: mail leaves through a third party rather than through the
+customer's own GitHub, so an operator who considers that egress unacceptable runs the air-gapped
+shape rather than discovering the attempt in their logs.
+
+**It must not** read the key from `Settings`. `quantamind config` prints that object;
+`types/dotenv.credential` gives the same two sources with the same precedence and puts the value
+nowhere that gets printed. `serve/commands/run_email.py` reads it and passes it down.
+
+**What could still silently fail:** a 2xx from Resend means the message was QUEUED. Whether it
+reached an inbox is an event this process never observes, so `run_email` prints the id and says
+so rather than printing "sent". `onboarding@resend.dev` delivers only to the Resend account
+owner — mail from it to any other address is accepted and never arrives, which is the one failure
+here that looks exactly like success.
+
+
 ## Billing — what an account is entitled to, and who decides
 
 **The full reference is `docs/engineering/STRIPE.md`.** This section is the codebase map — what

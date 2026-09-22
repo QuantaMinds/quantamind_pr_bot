@@ -2,7 +2,7 @@
 
 WHAT: Scans the documentation for `just <recipe>` and `quantamind <subcommand>` and checks each
       one against reality -- the recipe names in the justfile, and the subparsers registered in
-      `serve/cli.py`. A subcommand `cli.py` itself lists as unbuilt must carry
+      `serve/arguments.py`. A subcommand the CLI itself lists as unbuilt must carry
       `documented-command:unbuilt` on the documenting line.
 WHY:  `check_documented_commands.py` matches `python -m` and nothing else, so two whole classes of
       documented command were invisible to it. **`just fixtures` exited 1 on every invocation it
@@ -167,7 +167,8 @@ def main() -> int:
                             document,
                             number,
                             "documented-recipe",
-                            f"`quantamind {name}` is listed UNBUILT in cli.py and exits 2 — "
+                            f"`quantamind {name}` is listed UNBUILT in serve/arguments.py "
+                            f"and exits 2 — "
                             f"document it as not built, or mark it {UNBUILT}",
                         )
                     )
