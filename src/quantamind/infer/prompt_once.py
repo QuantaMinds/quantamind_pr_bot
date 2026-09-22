@@ -15,7 +15,8 @@ CONSUMED BY: `serve/settle.py`.
 
 from __future__ import annotations
 
-from quantamind.infer.vertex import MODEL, InferenceFailed, post, token
+from quantamind.infer.vertex import MODEL, InferenceFailed, endpoint, post
+from quantamind.types.admission.model_route import ModelRoute
 
 
 def ask(
@@ -25,6 +26,7 @@ def ask(
     location: str = "us-central1",
     gcloud: str = "/opt/homebrew/share/google-cloud-sdk/bin/gcloud",
     model: str = MODEL,
+    route: ModelRoute | None = None,
 ) -> str:
     """One prompt, the reply's text. **Split from `read()` because it parses nothing.**
 
@@ -35,14 +37,10 @@ def ask(
     **The truncation check stays.** A cut-off reply reads as a shorter answer rather than a broken
     one, which is the failure shape this project keeps mistaking for a result.
     """
-    bearer = token(gcloud)
-    url = (
-        f"https://{location}-aiplatform.googleapis.com/v1/projects/{project}"
-        f"/locations/{location}/publishers/google/models/{model}:generateContent"
-    )
+    url, auth = endpoint(route, project=project, location=location, model=model, gcloud=gcloud)
     answer = post(
         url,
-        bearer,
+        auth,
         {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": 4096},

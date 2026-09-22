@@ -30,6 +30,7 @@ from quantamind.infer.vertex import InferenceFailed, Unavailable
 from quantamind.ingest.diff import DiffReadFailed, stated_goal, unified_diff
 from quantamind.ingest.standards.conventions import written
 from quantamind.parse.importers import importers
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.settings import Settings
 
 
@@ -51,6 +52,7 @@ def explain(
     paths: Sequence[str],
     settings: Settings,
     history: Mapping[str, int] | None = None,
+    route: ModelRoute | None = None,
 ) -> tuple[Summary | None, str]:
     """What the change does, whether it did what the author said, and who it affects.
 
@@ -80,6 +82,7 @@ def explain(
             history=history,
             conventions=written(clone, head_sha),
             gcloud=settings.gcloud_path,
+            route=route,
         )
     except (InferenceFailed, Unavailable, DiffReadFailed) as exc:
         # **THE REASON IS RETURNED, NOT ONLY LOGGED.** A delivery hit MAX_TOKENS, the summary was

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from quantamind.infer import gemini
+from quantamind.infer import gemini, vertex
 from quantamind.infer.change_summary import MAX_DIFF_CHARS
 from quantamind.infer.diff_cap import TRUNCATED, capped
 
@@ -100,7 +100,7 @@ def test_an_oversized_review_diff_reaches_the_model_marked(
             "_ms": 1,
         }
 
-    monkeypatch.setattr(gemini, "token", lambda gcloud: "t")
+    monkeypatch.setattr(vertex, "token", lambda gcloud: "t")
     monkeypatch.setattr(gemini, "post", fake_post)
 
     gemini.read("x" * (REVIEW_CAP + 1_000), ["src/a.py"], project="p")
@@ -121,7 +121,7 @@ def test_a_review_diff_that_fits_is_sent_whole(monkeypatch: pytest.MonkeyPatch) 
             "_ms": 1,
         }
 
-    monkeypatch.setattr(gemini, "token", lambda gcloud: "t")
+    monkeypatch.setattr(vertex, "token", lambda gcloud: "t")
     monkeypatch.setattr(gemini, "post", fake_post)
 
     gemini.read("+ one small change\n", ["src/a.py"], project="p")

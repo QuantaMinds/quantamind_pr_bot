@@ -33,6 +33,7 @@ from quantamind.infer import vertex
 from quantamind.infer.diff_cap import capped
 from quantamind.infer.summary_prompt import PROMPT
 from quantamind.ingest.diff import Stated
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.spend import Spend, measured
 
 # **CUT FROM 60,000 WHEN A REAL 27-FILE DELIVERY HIT MAX_TOKENS.** The diff shares the prompt
@@ -109,14 +110,13 @@ def summarise(
     conventions: Sequence[tuple[str, str]] = (),
     gcloud: str = "gcloud",
     location: str = "us-central1",
+    route: ModelRoute | None = None,
 ) -> Summary:
     """Ask the model what changed and whether it matches the author's stated purpose."""
     if not diff.strip():
         raise vertex.InferenceFailed("no diff to summarise")
-    token = vertex.token(gcloud)
-    url = (
-        f"https://{location}-aiplatform.googleapis.com/v1/projects/{project}"
-        f"/locations/{location}/publishers/google/models/{vertex.MODEL}:generateContent"
+    url, auth = vertex.endpoint(
+        route, project=project, location=location, model=vertex.MODEL, gcloud=gcloud
     )
     goal = stated.text() or "(the author wrote no description)"
     # **AN EMPTY LIST IS SAID IN WORDS, NOT LEFT AS A BLANK.** A blank section reads to a
@@ -134,7 +134,7 @@ def summarise(
     )
     answer = vertex.post(
         url,
-        token,
+        auth,
         {
             "contents": [
                 {

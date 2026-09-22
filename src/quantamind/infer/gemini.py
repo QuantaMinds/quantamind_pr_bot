@@ -32,9 +32,10 @@ from quantamind.infer.diff_cap import capped
 from quantamind.infer.vertex import (
     MODEL,
     InferenceFailed,
+    endpoint,
     post,
-    token,
 )
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.finding import Finding
 from quantamind.types.spend import Spend, measured
 
@@ -111,6 +112,7 @@ def read(
     location: str = "us-central1",
     gcloud: str = "gcloud",
     model: str = MODEL,
+    route: ModelRoute | None = None,
 ) -> tuple[list[Finding], Spend]:
     """Findings about `paths` only. Raises `Unavailable` when there are no credentials.
 
@@ -121,17 +123,13 @@ def read(
     """
     if not paths:
         return [], Spend()
-    bearer = token(gcloud)
-    url = (
-        f"https://{location}-aiplatform.googleapis.com/v1/projects/{project}"
-        f"/locations/{location}/publishers/google/models/{model}:generateContent"
-    )
+    url, auth = endpoint(route, project=project, location=location, model=model, gcloud=gcloud)
     prompt = PROMPT.format(
         max_findings=MAX_FINDINGS, diff=capped(diff, MAX_DIFF_CHARS), context=context
     )
     answer = post(
         url,
-        bearer,
+        auth,
         {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": 32768},

@@ -68,7 +68,9 @@ def review_pull_request(review: Review, settings: Settings) -> Delivered:
     )
     footer = seat_footer(admission) if admission.reason == "seat_full_public" else ""
     try:
-        done = deliver(review.repo, review.number, review.head_sha, run_with, footer)
+        done = deliver(
+            review.repo, review.number, review.head_sha, run_with, footer, admission.model_route
+        )
     except BaseException:
         settle(admission, settings, "failed")
         raise

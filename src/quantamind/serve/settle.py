@@ -32,6 +32,7 @@ import re
 from dataclasses import dataclass
 
 from quantamind.infer.prompt_once import ask as _ask
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.finding import Finding
 from quantamind.verify.external_facts import sha_exists, tags_at
 from quantamind.verify.release_claims import BOUND, NOT_A_PACKAGE
@@ -129,9 +130,11 @@ def answer(question: str, today: str) -> str:
     return ""
 
 
-def settle(finding: Finding, *, project: str, today: str) -> Settled:
+def settle(
+    finding: Finding, *, project: str, today: str, route: ModelRoute | None = None
+) -> Settled:
     """Ask, answer, re-decide. Publishes unless the model withdraws given a fact it lacked."""
-    asked = _json(_ask(ASK.format(claim=finding.claim), project=project))
+    asked = _json(_ask(ASK.format(claim=finding.claim), project=project, route=route))
     if not asked.get("external"):
         return Settled(True, "", "", "rests on the code shown")
     question = str(asked.get("question", ""))
@@ -139,7 +142,11 @@ def settle(finding: Finding, *, project: str, today: str) -> Settled:
     if not fact:
         return Settled(True, question, "", "no authority could answer; not grounds to drop it")
     verdict = _json(
-        _ask(REDECIDE.format(claim=finding.claim, question=question, fact=fact), project=project)
+        _ask(
+            REDECIDE.format(claim=finding.claim, question=question, fact=fact),
+            project=project,
+            route=route,
+        )
     )
     stands = bool(verdict.get("stands", True))
     return Settled(stands, question, fact, str(verdict.get("why", "")))

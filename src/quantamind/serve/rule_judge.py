@@ -32,6 +32,7 @@ CONSUMED BY: `serve/review_delivery.py`, which passes the result into `verify/ru
 from __future__ import annotations
 
 from quantamind.infer.prompt_once import ask as _ask
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.settings import Settings
 from quantamind.types.standards.judged import Verdict
 from quantamind.types.standards.rule import Rule
@@ -90,7 +91,7 @@ def parse_reply(text: str) -> tuple[Verdict, str, str]:
     return verdict, quote, " ".join(lines[2:]).strip()
 
 
-def judge_with(settings: Settings) -> Ask | None:
+def judge_with(settings: Settings, route: ModelRoute | None = None) -> Ask | None:
     """A judge bound to these settings, or `None` when no model may be called.
 
     **`None` IS THE CONFIGURED-OFF ANSWER AND IT IS NOT AN ERROR.** `verify/judged_rule.judge_all`
@@ -109,6 +110,7 @@ def judge_with(settings: Settings) -> Ask | None:
             ),
             project=settings.inference_project,
             gcloud=settings.gcloud_path,
+            route=route,
         )
         return parse_reply(reply)
 

@@ -20,7 +20,7 @@ import pytest
 
 from quantamind.serve.review import gate
 from quantamind.types.admission.decision import Admission, Mode
-from quantamind.types.admission.model_route import OurVertex
+from quantamind.types.admission.model_route import GeminiKey, OurVertex
 from quantamind.types.forge.delivery import Review
 from quantamind.types.review import Delivered, Outcome
 from quantamind.types.settings import Settings
@@ -39,9 +39,9 @@ def _run(
     monkeypatch.setattr(gate, "settle", lambda a, s, outcome: settled.append(outcome))
 
     def fake_deliver(
-        repo: str, number: int, sha: str, settings: Settings, footer: str
+        repo: str, number: int, sha: str, settings: Settings, footer: str, route: Any = None
     ) -> Delivered:
-        ran.append((settings, footer))
+        ran.append((settings, footer, route))
         if isinstance(result, Exception):
             raise result
         return result
@@ -91,7 +91,7 @@ def test_a_free_review_runs_with_inference_switched_off(monkeypatch: pytest.Monk
 
     gate.review_pull_request(REVIEW, SETTINGS)
 
-    assert [settings.runs_model for settings, _ in ran] == [False]
+    assert [settings.runs_model for settings, _, _ in ran] == [False]
 
 
 def test_a_full_review_keeps_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,7 +99,7 @@ def test_a_full_review_keeps_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
     gate.review_pull_request(REVIEW, SETTINGS)
 
-    assert [settings.runs_model for settings, _ in ran] == [True]
+    assert [settings.runs_model for settings, _, _ in ran] == [True]
 
 
 def test_an_unseated_author_on_a_public_repo_gets_the_footer_naming_them(
@@ -121,3 +121,15 @@ def test_a_refusal_never_reaches_the_pipeline(monkeypatch: pytest.MonkeyPatch) -
     done = gate.review_pull_request(REVIEW, SETTINGS)
 
     assert (ran, settled, done.outcome) == ([], [], Outcome.NOT_ENTITLED)
+
+
+def test_a_byok_review_hands_the_customers_key_to_the_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The key must reach every model call. Dropped here, a BYOK customer runs on our model."""
+    byok = Admission(Mode.FULL, "full", model_route=GeminiKey("AIza-theirs"))
+    _, ran = _run(monkeypatch, byok, _done(Outcome.POSTED))
+
+    gate.review_pull_request(REVIEW, SETTINGS)
+
+    assert [route for _, _, route in ran] == [GeminiKey("AIza-theirs")]

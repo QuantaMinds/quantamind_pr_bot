@@ -4553,6 +4553,14 @@ Every pull request is decided BEFORE anything is cloned:
 **Billing decides; the reviewer carries the answer.** Seats and credits must be counted
 atomically across concurrent pull requests, which a SQLite file on a lock-free mount cannot do.
 
+**BYOK: the customer's key travels as a value, never as a setting.** Billing returns the decrypted
+Gemini key in the authorize reply; `admit()` wraps it as `GeminiKey`, and it is passed explicitly
+`deliver → applied / examine / explain → rule judge / deep / settle / summarise → vertex.endpoint`.
+There it becomes an `x-goog-api-key` HEADER on the Gemini API (`generativelanguage.googleapis.com`),
+never part of a URL. It is never logged, stored, or put on `Settings`, and `GeminiKey.__repr__` shows
+only its last four characters. Absent a route, every call bills our Vertex project exactly as before.
+A BYOK review still needs a deployment with inference switched on.
+
 **A free review is the same pipeline with inference switched off** (`dataclasses.replace(settings,
 inference_enabled=False)`), so no step can forget to skip the model.
 

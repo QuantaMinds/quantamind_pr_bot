@@ -33,6 +33,7 @@ from quantamind.ingest.standards import rules_file
 from quantamind.ingest.standards.inherited import ORG_REPO, Inheritance, combine
 from quantamind.serve.blocking_status import announce
 from quantamind.serve.rule_judge import judge_with
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.settings import Settings
 from quantamind.types.standards.checked import Checked
 from quantamind.types.standards.judged import Judged
@@ -71,6 +72,7 @@ def applied(
     number: int,
     settings: Settings,
     clone_org: OrgClone | None = None,
+    route: ModelRoute | None = None,
 ) -> tuple[tuple[Checked, ...], tuple[Judged, ...], Inheritance]:
     """Run every declared standard over the change, post the status, return all three parts.
 
@@ -92,7 +94,7 @@ def applied(
         store,
         repo,
         number,
-        judge_with(settings),
+        judge_with(settings, route),
         inherited=merged.rules if clone_org is not None else None,
     )
     # **`checks` ONLY.** See the module docstring: a model verdict does not block a merge.

@@ -1,6 +1,7 @@
 """One authenticated call to Vertex, and the two failures it can end in.
 
-WHAT: `token(gcloud)` obtains a bearer token; `post(url, token, body)` makes one call and
+WHAT: `endpoint(route, ...)` gives the URL and auth header for one call — our Vertex project, or
+      the customer's own Gemini API key (BYOK). `post(url, headers, body)` makes the call and
       returns the parsed reply with its elapsed milliseconds attached. `Unavailable` and
       `InferenceFailed` are the two ways a model read ends badly.
 WHY:  **`prompt_once.py` WAS IMPORTING `_post` AND `_token` OUT OF `gemini`.** A second module
@@ -20,7 +21,11 @@ WHY:  **`prompt_once.py` WAS IMPORTING `_post` AND `_token` OUT OF `gemini`.** A
       **THE ELAPSED TIME IS ATTACHED TO THE REPLY**, not measured by the caller: a caller timing
       it separately would be timing its own parsing too, and a cost that drifts from the bill is
       worse than no cost at all.
-IMPORTS: stdlib, plus `ingest.google_auth` for the credential. Nothing to its right.
+
+      **A CUSTOMER'S KEY GOES IN A HEADER, NEVER THE URL.** A URL is what reaches an access log or
+      an exception message; `x-goog-api-key` does not. The Gemini API takes the same
+      `generateContent` body and returns the same shape, so only the endpoint and the auth change.
+IMPORTS: stdlib, `ingest.google_auth` for our credential, `types.admission.model_route`.
 CONSUMED BY: `infer/gemini.py`, `infer/prompt_once.py`, `infer/change_review.py`,
       `serve/commands/run_commit.py`, `serve/deep_review.py`.
 """
@@ -33,10 +38,12 @@ import urllib.error
 import urllib.request
 
 from quantamind.ingest import google_auth
+from quantamind.types.admission.model_route import GeminiKey, ModelRoute
 from quantamind.types.deployment import Destination, permit
 
 MODEL = "gemini-2.5-pro"
 TIMEOUT_S = 300
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
 
 
 class Unavailable(RuntimeError):
@@ -68,14 +75,28 @@ def token(gcloud: str) -> str:
     return got.value
 
 
-def post(url: str, token: str, body: dict[str, object]) -> dict[str, object]:
+def endpoint(
+    route: ModelRoute | None, *, project: str, location: str, model: str, gcloud: str
+) -> tuple[str, dict[str, str]]:
+    """Where one call goes, and how it authenticates. None or `OurVertex` is our project."""
+    if isinstance(route, GeminiKey):
+        return f"{GEMINI_API}/models/{model}:generateContent", {"x-goog-api-key": route.api_key}
+    ours = route.project if route is not None else project
+    url = (
+        f"https://{location}-aiplatform.googleapis.com/v1/projects/{ours}"
+        f"/locations/{location}/publishers/google/models/{model}:generateContent"
+    )
+    return url, {"Authorization": f"Bearer {token(gcloud)}"}
+
+
+def post(url: str, auth: dict[str, str], body: dict[str, object]) -> dict[str, object]:
     """One call. **The elapsed time is attached to the reply**: a caller timing it separately would
     be timing its own parsing too, and a cost that drifts from the bill is worse than none."""
     started = time.monotonic()
     request = urllib.request.Request(
         url,
         data=json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={**auth, "Content-Type": "application/json"},
     )
     try:
         # **ASK BEFORE THE SOCKET OPENS.** D7f: an air-gapped deployment REFUSES

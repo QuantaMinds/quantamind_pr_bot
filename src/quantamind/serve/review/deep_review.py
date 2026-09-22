@@ -1,10 +1,8 @@
 """The reviewer pass: read the ranked files with a model, then keep only what a parser can anchor.
 
-WHAT: `examine(...)` is the delivery-facing entry point: it applies the allocation and the
-      settings policy, then calls `deep(clone, sha, ranked, project)`, which runs `infer/` over
-      the diff restricted to the files the
-      ranker selected, then `verify/anchor.locate()` over every finding it returns. Reports what
-      survived and what was dropped, and by which mechanism.
+WHAT: `examine(...)` applies the allocation and settings, then `deep(...)` runs the model — ours
+      or the customer's key — over the ranked files' diff and `verify/anchor.locate()` over every
+      finding. Reports what survived and what was dropped, and by which mechanism.
 WHY:  **THIS IS THE HALF THE EVIDENCE SAYS IS BAD, AND THE COUNTS ARE PRINTED FOR THAT REASON.**
       Raw findings measure 66.7-82.1% wrong across four blind rater pools at 0.013-0.037 correct
       findings per pull request. Nothing here makes that untrue. What this file does is ensure the
@@ -22,10 +20,8 @@ IMPORTS: infer.gemini, verify.{anchor,publishable}, ingest.change_shape, types.d
       render.{deep_report,shape_line}. Rightmost layer, so all of them are allowed here -- and
       `verify/` still cannot see `infer/`, which is the property rule 7 protects.
 
-      **THE RECORD AND THE PRINTING BOTH LEFT THIS FILE.** `Deep` is in `types/` because `render/`
-      prints it and may not import `serve/`; `render/deep_report.py` holds the text. What is left
-      here is one concern -- running the pass -- which is rule 6, and what pushed the split was
-      this file crossing the 200-line cap while `serve/` sat at its 15-file directory cap.
+      **THE RECORD AND THE PRINTING LEFT THIS FILE** (`types/deep.py`, `render/deep_report.py`) so
+      what remains is one concern -- running the pass -- which is rule 6.
 CONSUMED BY: `serve/cli.py` behind `--deep`.
 """
 
@@ -44,6 +40,7 @@ from quantamind.ingest.change_shape import shape
 from quantamind.ingest.review_window import WindowUnreadable
 from quantamind.render.blocks.shape_line import block
 from quantamind.serve.settle import settle
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.deep import Deep
 from quantamind.types.settings import Settings
 from quantamind.verify import publishable
@@ -93,6 +90,7 @@ def deep(
     project: str,
     changed: list[str] | None = None,
     gcloud: str = "gcloud",
+    route: ModelRoute | None = None,
 ) -> Deep:
     """Read `ranked` with the model, keep only findings a parser can place in the diff.
 
@@ -111,6 +109,7 @@ def deep(
         project=project,
         context=context_for(clone, sha, changed or ranked),
         gcloud=gcloud,
+        route=route,
     )
     located = [f for f in (locate(x, text) for x in found) if f is not None]
 
@@ -132,7 +131,7 @@ def deep(
     kept, withdrawn = [], 0
     for finding in surviving:
         try:
-            decided = settle(finding, project=project, today=date.today().isoformat())
+            decided = settle(finding, project=project, today=date.today().isoformat(), route=route)
         except (InferenceFailed, Unavailable):
             # **A SETTLE THAT COULD NOT RUN KEEPS THE FINDING.** Dropping on failure would make an
             # outage look like a filter working, which is the shape this project keeps catching.
@@ -158,7 +157,12 @@ def deep(
 
 
 def examine(
-    clone: Path, head_sha: str, reading: Reading, changed: list[str], settings: Settings
+    clone: Path,
+    head_sha: str,
+    reading: Reading,
+    changed: list[str],
+    settings: Settings,
+    route: ModelRoute | None = None,
 ) -> Deep | None:
     """Run the model over what the allocation funded, or say plainly it was never asked.
 
@@ -176,6 +180,7 @@ def examine(
             project=settings.inference_project,
             changed=changed,
             gcloud=settings.gcloud_path,
+            route=route,
         )
         # **PRINTED WHERE THE NUMBERS ARE PRODUCED.** These five counts were logged by
         # `serve/review_delivery.py`, which had to be handed every one of them to say a sentence

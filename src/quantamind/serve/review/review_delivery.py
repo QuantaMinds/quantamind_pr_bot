@@ -51,6 +51,7 @@ from quantamind.serve.review.standards_step import applied
 from quantamind.serve.working_clone import ensure, sweep
 from quantamind.store import tenancy
 from quantamind.store.reviews import bank
+from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.change import REVIEWABLE_SUFFIXES
 from quantamind.types.review import Delivered, Outcome
 from quantamind.types.settings import Settings
@@ -58,7 +59,12 @@ from quantamind.types.spend import Spend
 
 
 def deliver(
-    delivery_repo: str, number: int, head_sha: str, settings: Settings, footer: str = ""
+    delivery_repo: str,
+    number: int,
+    head_sha: str,
+    settings: Settings,
+    footer: str = "",
+    route: ModelRoute | None = None,
 ) -> Delivered:
     """Run the pipeline for one pull request and post, or rehearse posting.
 
@@ -130,14 +136,14 @@ def deliver(
     # pitch deck both describe rules as step one and the model as step three. They described the
     # rendered comment's order, not this function's, and nothing failed when the two disagreed.
     checks, judged, inherited = applied(
-        clone, head_sha, list(changed), store, delivery_repo, number, settings
+        clone, head_sha, list(changed), store, delivery_repo, number, settings, route=route
     )
 
     # **THE ALLOCATION DECIDES WHERE INFERENCE GOES.** The measured claim -- top three by fix
     # history misses 1.21% against alphabetical's 3.12% -- is about which files to read FIRST,
     # and a budget is the only consumer that claim ever fitted.
     reading = allocate(reviewed.ranking, list(changed))
-    examined = examine(clone, head_sha, reading, list(changed), settings)
+    examined = examine(clone, head_sha, reading, list(changed), settings, route)
     # **THE DETERMINISTIC HALF, GATHERED WHETHER OR NOT THE MODEL RAN**, and reproducible on the
     # same commit by anyone — which is why it may be asserted where a model finding may not.
     facts = gather(clone, delivery_repo, number, changed, head_sha, base.sha)
@@ -146,7 +152,7 @@ def deliver(
     # same numbers rather than querying the store twice and risking two answers.
     past = {u.unit.site.path: int(u.score.value) for u in reviewed.ranking.units}
     told, unreadable = explain(
-        clone, head_sha, delivery_repo, number, reading.paths, settings, history=past
+        clone, head_sha, delivery_repo, number, reading.paths, settings, past, route
     )
 
     parts = (part.spend for part in (told, examined) if part is not None)
