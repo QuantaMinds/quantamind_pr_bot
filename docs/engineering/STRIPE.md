@@ -208,6 +208,9 @@ the row stays pending with an attempt count.
 
 ---
 
+It is the only billing route this service ANSWERS. Since seats and credits, this service also
+ASKS billing one question per pull request — see "Seats and credits, asked on every pull request".
+
 ## 8. Running it end to end, locally
 
 **Terminal 1 — the reviewer.** Needs `QUANTAMIND_PROVISION_SECRET` shared with the billing service:
@@ -334,5 +337,59 @@ enough to be sure nothing is owed to those rows.
    paid tier.
 6. **Check the clock on both.** The reviewer compares `as_of`; Stripe rejects a signature more than
    300 seconds out.
-7. **Watch the first real deliveries** before anything is wired to `may_review`. See
-   "`may_review` IS NOT WIRED TO THIS" in `docs/engineering/CODEBASE.md`.
+7. **Apply migration `0013_seats_credits.sql`** on the billing database, and set on the billing
+   service `STRIPE_PRICE_CREDIT` (the $1 one-time price) and `BYOK_ENCRYPTION_KEY` (32 random bytes,
+   base64, from Secret Manager — losing it makes every saved customer key unreadable).
+8. **Set `QUANTAMIND_BILLING_URL`** on the reviewer to the billing service. Unset, every pull request
+   is decided from the cached plan: paying accounts reviewed unmetered, nobody charged.
+9. **Schedule the drain.** `POST /billing/push/drain` every few minutes (Cloud Scheduler, same
+   bearer). Nothing else retries a failed entitlement push.
+
+---
+
+## 12. Seats and credits, asked on every pull request
+
+Before anything is cloned, the reviewer (`serve/review/admission.py`) asks
+`POST /billing/review/authorize` with the author's GitHub **id**, the repository's visibility, and
+whether it will call a model. The billing service (`server/src/billing/admission.ts`) answers in one
+transaction with the account row locked, so two pull requests cannot both take the last seat or the
+last credit:
+
+| situation | answer |
+|---|---|
+| unpaid account, public repository | `free` — deterministic review, no model, no credit |
+| unpaid account, private repository | `refused` — `private_needs_plan` |
+| author is a bot (`user.type == "Bot"`) | `free` — never a seat, never a credit |
+| paid, author holds a seat or one is free | `full` — seat assigned automatically, 1 credit reserved |
+| paid, every seat taken | private: `refused` (`seat_full`, names the author); public: `free` + a footer naming them |
+| paid, seated, no credits left | `refused` — `no_credits`, with the reset date |
+| own-key plan | `full` with the customer's key, no credit; `byok_key_missing` if none is saved |
+
+**One credit is one model review of one head commit**, keyed `forge:account:repo#pr@sha`, so a
+redelivered webhook is charged once. Each paid seat brings 15 per billing period, pooled; bought
+credits (`$1`, a one-time Checkout) never expire; the allowance is spent first.
+
+**Every exit settles.** `serve/review/gate.py` calls `POST /billing/review/settle`: only a review
+that reached someone and consulted a model keeps its credit. Nothing to say, a duplicate, a model
+that never answered, or a crash are refunded — into the same bucket and period.
+
+**When billing does not answer**, the reviewer decides from the cached plan with
+`verify/paid_access.decide` (the same 7-day grace rule billing applies): a paying account is
+reviewed in full and UNMETERED, logged as exactly that; anyone else gets only what is free.
+Air-gapped refuses `Destination.BILLING` and always takes this path.
+
+**Verified across both services on 2026-09-22**, with signed webhooks through the real listener:
+seat 1 and 2 assigned, a third developer refused by name with nothing cloned, all 30 credits used
+→ refused with the reset date, a Stripe-signed credit purchase applied once despite a replay and
+spent next, and the billing service stopped → reviewed unmetered. That run found the
+microsecond-precision bug described in `server/src/billing/admission.ts`'s balance query.
+
+## 13. The customer's own model key
+
+The billing service stores it encrypted (AES-256-GCM under `BYOK_ENCRYPTION_KEY`), validated with
+Google before saving, readable only as its last four characters. It is returned in the authorize
+reply for one review; the reviewer carries it as `GeminiKey` through every model call to
+`infer/vertex.endpoint`, which sends it as an `x-goog-api-key` header to the Gemini API — never in
+a URL, never on `Settings`, never logged. Without a key a BYOK review is refused rather than run on
+our model.
+
