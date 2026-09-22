@@ -38,11 +38,30 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class Review:
-    """A change we should act on."""
+    """A change we should act on, and who opened it.
+
+    **`private` DEFAULTS TO TRUE.** A payload that did not say is treated as private, so a missing
+    field can refuse a free review of public code but can never give one away for private code.
+
+    **THE AUTHOR IS AN ID, NOT A LOGIN.** Billing holds seats by `author_id`; a login is renamed and
+    then reused by somebody else, and a seat keyed on it would pass to them. `author_login` is for
+    the sentence that names them on the pull request, and nothing else.
+    """
 
     repo: str
     number: int
     head_sha: str
+    author_id: str = ""
+    author_login: str = ""
+    author_is_bot: bool = False
+    private: bool = True
+    account: str = ""
+    installation_id: int = 0
+
+    @property
+    def owner(self) -> str:
+        """The account the repository belongs to — the one that is billed."""
+        return self.account or self.repo.partition("/")[0]
 
 
 @dataclass(frozen=True, slots=True)

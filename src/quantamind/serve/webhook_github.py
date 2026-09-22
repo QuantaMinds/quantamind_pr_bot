@@ -29,7 +29,8 @@ WHY:  **This is the only untrusted input the product accepts.** Everything else 
       odd length, non-hex — each is a distinct reason, returned rather than collapsed into False,
       because "someone is probing us" and "our own secret is misconfigured" need different
       responses from an operator.
-IMPORTS: types.forge.delivery — the four outcomes, shared with the Bitbucket parser. Leftward only.
+IMPORTS: types.forge.delivery — the four outcomes, shared with the Bitbucket parser —
+      and serve.pull_request_event, which reads the pull request. Leftward and same-layer only.
 CONSUMED BY: the HTTP binding, and nothing else — the decisions here are testable without one.
 """
 
@@ -44,6 +45,7 @@ from typing import Any
 # The four outcomes live in `types/` because a second forge produces the same ones from a
 # payload that shares no field names with GitHub's. This module PARSES them; it does not own
 # them, and it does not re-export them — every consumer imports them from their one home.
+from quantamind.serve.pull_request_event import reviewed
 from quantamind.types.forge.delivery import Ignore, Installed, Review, Withdrawn
 
 SIGNATURE_HEADER = "X-Hub-Signature-256"
@@ -53,7 +55,6 @@ PREFIX = "sha256="
 DIGEST_HEX_LEN = 64
 # The only event that can produce a review. Everything else is acknowledged and dropped.
 REVIEWABLE_EVENT = "pull_request"
-REVIEWABLE_ACTIONS = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
 class Rejected(Enum):
@@ -176,20 +177,4 @@ def interpret(event: str | None, body: bytes) -> Review | Installed | Withdrawn 
     if not isinstance(payload, dict):
         return Ignore(f"body is {type(payload).__name__}, not an object")
 
-    action = str(payload.get("action") or "")
-    if action not in REVIEWABLE_ACTIONS:
-        return Ignore(f"action {action!r} does not change the code under review")
-
-    pull = payload.get("pull_request")
-    repository = payload.get("repository")
-    if not isinstance(pull, dict) or not isinstance(repository, dict):
-        return Ignore("payload carried no pull_request or repository object")
-    if pull.get("draft") is True:
-        return Ignore("the pull request is a draft")
-
-    repo = str(repository.get("full_name") or "")
-    number = pull.get("number")
-    head_sha = str((pull.get("head") or {}).get("sha") or "")
-    if not repo or not isinstance(number, int) or not head_sha:
-        return Ignore(f"incomplete payload: repo={repo!r} number={number!r} head={head_sha[:8]!r}")
-    return Review(repo=repo, number=number, head_sha=head_sha)
+    return reviewed(payload)
