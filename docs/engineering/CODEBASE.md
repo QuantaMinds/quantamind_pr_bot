@@ -514,9 +514,12 @@ none. **Plain HTTP is refused rather than downgraded** — the token is in the h
 
 **`serve/` reached its 15-file cap while building D1e, and this is the honest seam.** The rest of
 `serve/` is the edge — listener, webhook, CLI, health, onboarding — which receives a request and
-hands it here. These six are one pipeline with one entry point: `review_delivery.deliver()`
-orchestrates, `change_facts.gather()` collects, `standards_step.applied()` enforces,
-`deep_review`/`pin_review` produce findings, `review_body.body_for()` assembles the text.
+hands it here. They are one pipeline with one entry point: `gate.review_pull_request()` admits and
+settles, `review_delivery.deliver()` orchestrates, `change_facts.gather()` collects,
+`standards_step.applied()` enforces, `deep_review`/`pin_review` produce findings —
+`deep_prompt.py` holding the two texts the model is shown — and `review_body.body_for()` assembles
+the text. `admission.py` and `refusal.py` are the billing edge: who is allowed a review, and what a
+declined pull request is told.
 
 **THE DETERMINISTIC HALF RUNS FIRST, CHANGED 2026-09-11.** `deliver()` called `examine()` — the
 model — before `applied()`, so the commit status that can block a merge waited on an inference call
@@ -4548,6 +4551,7 @@ Every pull request is decided BEFORE anything is cloned:
 | `serve/review/admission.py` | `admit()`: asks billing, carries its answer; on no answer falls back to the cached plan via `paid_access`, reviewing a paying account **in full and unmetered** |
 | `serve/review/gate.py` | `review_pull_request()`: admit, then refuse / free review / full review, and **settle on every exit** — only a review that reached someone and consulted a model keeps its credit |
 | `serve/review/refusal.py` | posts the refusal comment and a `success` status whose description names why — never an absent status, which deadlocks a required check |
+| `serve/review/deep_prompt.py` | `diff_for()` / `context_for()`: the ranked files' diff and the shape of the **whole** change — two scopes on purpose, split out when `deep_review.py` crossed the 200-line cap |
 | `render/not_entitled.py` | one true sentence per refusal reason; names the author only when the fix is about them |
 
 **Billing decides; the reviewer carries the answer.** Seats and credits must be counted

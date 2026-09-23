@@ -42,6 +42,11 @@ DEFAULT_MAX_REQUESTS = 3
 DEFAULT_THRESHOLD_PERCENTILE = 0.9
 
 
+_DEFAULT_MODEL = "gemini-2.5-pro"
+"""Kept here rather than imported from `infer/vertex.py`: `types/` may not read a layer to its
+right. `infer/vertex.py` takes the name as an argument, so there is one value and this is it."""
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Everything the process needs to know, fixed at startup.
@@ -59,7 +64,10 @@ class Settings:
     max_requests: int = DEFAULT_MAX_REQUESTS
     threshold_percentile: float = DEFAULT_THRESHOLD_PERCENTILE
     inference_enabled: bool = False
-    model: str = "claude-opus-5"
+    model: str = _DEFAULT_MODEL
+    """Which model a review calls. **It said `claude-opus-5` and nothing read it**, while every call
+    went to the constant in `infer/vertex.py` — so `quantamind config` printed a model this build
+    has never called. It is now the value the calls actually use."""
     subprocess_timeout_seconds: int = 30
     clone_root: str = ".quantamind-clones"
     app_id: str = ""
@@ -100,6 +108,12 @@ class Settings:
     read from disk at the moment it signs and never held here, for the same reason the webhook
     secret is read in `serve/commands/run_endpoint.py` rather than stored: a credential in a
     settings object reaches a log or a config dump the first time anybody prints one."""
+
+    web_app_url: str = "https://quantamind.co"
+    """Our own site, used for the links in a refusal comment. **Configuration, because it is not the
+    same everywhere**: a staging deployment that told a customer to buy at the production site, or
+    an on-prem one pointing at a site its users cannot reach, is a dead end printed on a pull
+    request."""
 
     billing_url: str = ""
     """The billing service asked on every pull request (`POST /billing/review/authorize`).
@@ -161,7 +175,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
             source, "THRESHOLD_PERCENTILE", DEFAULT_THRESHOLD_PERCENTILE
         ),
         inference_enabled=read_bool(source, "INFERENCE_ENABLED", False),
-        model=source.get(PREFIX + "MODEL", "claude-opus-5"),
+        model=source.get(PREFIX + "MODEL") or _DEFAULT_MODEL,
         subprocess_timeout_seconds=read_int(source, "SUBPROCESS_TIMEOUT_SECONDS", 30),
         clone_root=source.get(PREFIX + "CLONE_ROOT", ".quantamind-clones"),
         posting_enabled=read_bool(source, "POSTING_ENABLED", False),
@@ -172,6 +186,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         public_read_token=source.get(PREFIX + "PUBLIC_READ_TOKEN", ""),
         inference_project=source.get(PREFIX + "INFERENCE_PROJECT", ""),
         billing_url=source.get(PREFIX + "BILLING_URL", ""),
+        web_app_url=source.get(PREFIX + "WEB_APP_URL") or "https://quantamind.co",
         # **`or`, NOT A `get` DEFAULT.** `QUANTAMIND_GCLOUD_PATH=` — set but empty, which is
         # what commenting a line out in a `.env` produces — returns "" from `get`, and
         # `subprocess.run([""])` then fails with something that names no cause. Found by this

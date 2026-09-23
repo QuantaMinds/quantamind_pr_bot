@@ -342,7 +342,16 @@ enough to be sure nothing is owed to those rows.
    base64, from Secret Manager — losing it makes every saved customer key unreadable).
 8. **Set `QUANTAMIND_BILLING_URL`** on the reviewer to the billing service. Unset, every pull request
    is decided from the cached plan: paying accounts reviewed unmetered, nobody charged.
-9. **Schedule the drain.** `POST /billing/push/drain` every few minutes (Cloud Scheduler, same
+9. **Set `QUANTAMIND_WEB_APP_URL`** on the reviewer to the site the customer can actually reach.
+   Every refusal comment links it ("add a seat at …/account"); it defaults to `quantamind.co`, so a
+   staging or on-prem deployment sends its customers to somebody else's billing page.
+10. **Leave the commercial terms alone unless they change.** `CREDITS_PER_SEAT` (15), `TRIAL_DAYS`
+   (14), `MAX_SEATS` and `MAX_CREDITS_PER_PURCHASE` are read from the billing service's environment
+   and default to the published figures. The 7-day `past_due` grace window is deliberately **not**
+   configurable: it is compiled into `server/src/billing/plan.ts` and the reviewer's
+   `verify/paid_access.py`, and an account held open by one service and shut by the other is worse
+   than either answer.
+11. **Schedule the drain.** `POST /billing/push/drain` every few minutes (Cloud Scheduler, same
    bearer). Nothing else retries a failed entitlement push.
 
 ---

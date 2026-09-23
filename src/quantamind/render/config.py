@@ -32,6 +32,7 @@ def render_config(settings: Settings) -> str:
         f"inference_project          {settings.inference_project or '(unset)'}",
         # The billing service's URL is configuration, not a credential; its bearer is never here.
         f"billing_url                {settings.billing_url or '(unset: the cached plan decides)'}",
+        f"web_app_url                {settings.web_app_url}",
         f"gcloud_path                {settings.gcloud_path}",
         f"model                      {settings.model}",
         f"subprocess_timeout_seconds {settings.subprocess_timeout_seconds}",

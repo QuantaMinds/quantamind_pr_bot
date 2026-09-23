@@ -66,7 +66,11 @@ def review_pull_request(review: Review, settings: Settings) -> Delivered:
     run_with = (
         settings if admission.mode is Mode.FULL else replace(settings, inference_enabled=False)
     )
-    footer = seat_footer(admission) if admission.reason == "seat_full_public" else ""
+    footer = (
+        seat_footer(admission, settings.web_app_url)
+        if admission.reason == "seat_full_public"
+        else ""
+    )
     try:
         done = deliver(
             review.repo, review.number, review.head_sha, run_with, footer, admission.model_route

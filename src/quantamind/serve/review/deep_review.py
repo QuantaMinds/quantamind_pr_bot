@@ -16,70 +16,32 @@ WHY:  **THIS IS THE HALF THE EVIDENCE SAYS IS BAD, AND THE COUNTS ARE PRINTED FO
       judge is not added until one clears its pre-registered bars on a corpus it was not built on.**
 
       **THE MODEL IS SHOWN ONLY THE RANKED FILES.** That is the thesis and it is also the bill.
-IMPORTS: infer.gemini, verify.{anchor,publishable}, ingest.change_shape, types.deep, and
-      render.{deep_report,shape_line}. Rightmost layer, so all of them are allowed here -- and
+IMPORTS: infer.gemini, verify.{anchor,publishable}, types.deep, and the prompt material from
+      `serve/review/deep_prompt.py`. Rightmost layer, so all of them are allowed here -- and
       `verify/` still cannot see `infer/`, which is the property rule 7 protects.
 
-      **THE RECORD AND THE PRINTING LEFT THIS FILE** (`types/deep.py`, `render/deep_report.py`) so
-      what remains is one concern -- running the pass -- which is rule 6.
+      **THE RECORD, THE PRINTING AND THE PROMPT MATERIAL LEFT THIS FILE** (`types/deep.py`,
+      `render/deep_report.py`, `serve/review/deep_prompt.py`) so what remains is one concern --
+      running the pass -- which is rule 6.
 CONSUMED BY: `serve/cli.py` behind `--deep`.
 """
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from quantamind.allocate.depth import Reading
 from quantamind.infer import gemini, vertex
 from quantamind.infer.vertex import InferenceFailed, Unavailable
-from quantamind.ingest.change_shape import shape
-from quantamind.ingest.review_window import WindowUnreadable
-from quantamind.render.blocks.shape_line import block
+from quantamind.serve.review.deep_prompt import context_for, diff_for
 from quantamind.serve.settle import settle
 from quantamind.types.admission.model_route import ModelRoute
 from quantamind.types.deep import Deep
 from quantamind.types.settings import Settings
 from quantamind.verify import publishable
 from quantamind.verify.anchor import locate
-
-GIT_TIMEOUT_S = 60
-
-if TYPE_CHECKING:  # `Reviewed` lives in run_review, which imports THIS module at runtime.
-    pass
-
-
-def diff_for(clone: Path, sha: str, paths: list[str]) -> str:
-    """The diff of `sha` restricted to `paths`. Empty when those files did not change."""
-    if not paths:
-        return ""
-    done = subprocess.run(
-        ["git", "-C", str(clone), "show", sha, "--", *paths],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT_S,
-    )
-    if done.returncode != 0:
-        raise vertex.InferenceFailed(
-            f"git show {sha[:12]} exited {done.returncode}: {done.stderr.strip()[:120]}"
-        )
-    return done.stdout
-
-
-def context_for(clone: Path, sha: str, changed: list[str]) -> str:
-    """The change's shape as prompt text. Empty when git could not settle the commit's own time.
-
-    **A SHAPE THAT CANNOT BE MEASURED YIELDS NO CONTEXT, NEVER A GUESSED ONE.** `change_shape`
-    raises rather than falling back to a wall-clock window, and the honest response to that here
-    is the empty string -- the prompt the model saw before any of this was measured.
-    """
-    try:
-        return block(shape(clone, sha, changed))
-    except WindowUnreadable:
-        return ""
 
 
 def deep(
@@ -91,6 +53,7 @@ def deep(
     changed: list[str] | None = None,
     gcloud: str = "gcloud",
     route: ModelRoute | None = None,
+    model: str = vertex.MODEL,
 ) -> Deep:
     """Read `ranked` with the model, keep only findings a parser can place in the diff.
 
@@ -110,6 +73,7 @@ def deep(
         context=context_for(clone, sha, changed or ranked),
         gcloud=gcloud,
         route=route,
+        model=model,
     )
     located = [f for f in (locate(x, text) for x in found) if f is not None]
 
@@ -131,7 +95,13 @@ def deep(
     kept, withdrawn = [], 0
     for finding in surviving:
         try:
-            decided = settle(finding, project=project, today=date.today().isoformat(), route=route)
+            decided = settle(
+                finding,
+                project=project,
+                today=date.today().isoformat(),
+                route=route,
+                model=model,
+            )
         except (InferenceFailed, Unavailable):
             # **A SETTLE THAT COULD NOT RUN KEEPS THE FINDING.** Dropping on failure would make an
             # outage look like a filter working, which is the shape this project keeps catching.
@@ -181,6 +151,7 @@ def examine(
             changed=changed,
             gcloud=settings.gcloud_path,
             route=route,
+            model=settings.model,
         )
         # **PRINTED WHERE THE NUMBERS ARE PRODUCED.** These five counts were logged by
         # `serve/review_delivery.py`, which had to be handed every one of them to say a sentence

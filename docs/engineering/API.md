@@ -468,11 +468,19 @@ Set as environment variables; `quantamind config` prints the resolved values.
 | `QUANTAMIND_APP_KEY_PATH` | — | PEM private key, for installation tokens |
 | `QUANTAMIND_POSTING_ENABLED` | `0` | `0` rehearses completely and writes nothing |
 | `QUANTAMIND_INFERENCE_ENABLED` | `0` | Whether the model runs at all |
-| `QUANTAMIND_INFERENCE_PROJECT` | — | GCP project for Vertex |
+| `QUANTAMIND_INFERENCE_PROJECT` | — | GCP project for Vertex. **Empty runs no inference**, whatever `INFERENCE_ENABLED` says |
+| `QUANTAMIND_MODEL` | `gemini-2.5-pro` | The model every review calls |
+| `QUANTAMIND_GCLOUD_PATH` | `gcloud` | How to invoke gcloud; resolved from `PATH` unless given a path |
+| `QUANTAMIND_BILLING_URL` | — | The billing service asked per pull request. **Empty is not "free for everyone"** — the cached entitlement decides |
+| `QUANTAMIND_WEB_APP_URL` | `https://quantamind.co` | The site a refusal comment links to. Wrong here sends customers somewhere they cannot buy |
 | `QUANTAMIND_OAUTH_CLIENT_ID` | — | Required by `/login` |
 | `QUANTAMIND_OAUTH_CLIENT_SECRET` | — | Required by `/callback` |
+| `QUANTAMIND_PUBLIC_READ_TOKEN` | — | Read-only token for repositories we are **not** installed on; the installation token is tried first |
 | `QUANTAMIND_DEPLOYMENT_SHAPE` | `cloud` | `cloud`, `on_prem`, `air_gapped` |
 | `QUANTAMIND_CLONE_ROOT` | `.quantamind-clones` | Where working clones live |
+| `QUANTAMIND_MAX_REQUESTS` | `3` | Model requests per review; `0` makes every review deterministic |
+| `QUANTAMIND_THRESHOLD_PERCENTILE` | `0.9` | Where a rule starts firing. Must be strictly between 0 and 1 |
+| `QUANTAMIND_SUBPROCESS_TIMEOUT_SECONDS` | `30` | Ceiling on every git call |
 
 **`POSTING_ENABLED=0` is a complete rehearsal, not a description of one.** Everything runs — clone,
 API reads, ranking, rendering — and the comment is printed instead of sent. The only step not

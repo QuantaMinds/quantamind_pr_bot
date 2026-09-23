@@ -61,7 +61,7 @@ def digest(
     spots: Hotspots,
     *,
     project: str,
-    gcloud: str = "/opt/homebrew/share/google-cloud-sdk/bin/gcloud",
+    gcloud: str = "gcloud",
 ) -> str:
     """One paragraph about the counts, or a sentence saying why there is none.
 

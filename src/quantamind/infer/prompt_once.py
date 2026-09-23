@@ -24,7 +24,7 @@ def ask(
     *,
     project: str,
     location: str = "us-central1",
-    gcloud: str = "/opt/homebrew/share/google-cloud-sdk/bin/gcloud",
+    gcloud: str = "gcloud",
     model: str = MODEL,
     route: ModelRoute | None = None,
 ) -> str:

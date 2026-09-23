@@ -111,6 +111,7 @@ def judge_with(settings: Settings, route: ModelRoute | None = None) -> Ask | Non
             project=settings.inference_project,
             gcloud=settings.gcloud_path,
             route=route,
+            model=settings.model,
         )
         return parse_reply(reply)
 

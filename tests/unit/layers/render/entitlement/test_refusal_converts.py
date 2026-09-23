@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from quantamind.render.not_entitled import ACCOUNT, PRICING, refusal, seat_footer
+from quantamind.render.not_entitled import SITE, refusal, seat_footer
 from quantamind.types.admission.decision import Admission, Mode
 
 
@@ -39,7 +39,8 @@ REASONS = ["private_needs_plan", "seat_full", "no_credits", "byok_key_missing"]
 def test_each_reason_gives_its_own_way_forward_and_not_another_one() -> None:
     bodies = {reason: refusal(refused(reason)) for reason in REASONS}
 
-    assert PRICING in bodies["private_needs_plan"] and ACCOUNT not in bodies["private_needs_plan"]
+    assert f"{SITE}/pricing" in bodies["private_needs_plan"]
+    assert f"{SITE}/account" not in bodies["private_needs_plan"]
     assert "does not have a QuantaMind seat" in bodies["seat_full"]
     assert "used all of its review credits" in bodies["no_credits"]
     assert "Gemini API key" in bodies["byok_key_missing"]
@@ -98,4 +99,16 @@ def test_the_free_review_footer_names_who_needs_a_seat() -> None:
     )
 
     assert "@bob does not have a QuantaMind seat (3 of 3 in use)" in footer
-    assert ACCOUNT in footer
+    assert f"{SITE}/account" in footer
+
+
+def test_the_links_come_from_configuration_not_from_a_literal() -> None:
+    """A staging or on-prem deployment must not send a customer to the production site."""
+    body = refusal(refused("no_credits"), "https://review.acme.internal")
+    footer = seat_footer(
+        Admission(Mode.FREE, "seat_full_public", author_login="bo"), "https://review.acme.internal"
+    )
+
+    assert "https://review.acme.internal/account" in body
+    assert "https://review.acme.internal/account" in footer
+    assert "quantamind.co" not in body

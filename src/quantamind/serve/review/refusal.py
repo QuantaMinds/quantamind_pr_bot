@@ -48,7 +48,7 @@ def refuse(review: Review, admission: Admission, settings: Settings) -> Delivere
         print(f"[serve] {review.repo}#{review.number}: App removed; nothing posted", flush=True)
         return Delivered(Outcome.NOT_ENTITLED, (), (), None)
 
-    body = refusal(admission)
+    body = refusal(admission, settings.web_app_url)
     print(f"[serve] {review.repo}#{review.number}: not reviewed — {admission.reason}", flush=True)
     if settings.posting_enabled:
         publish(review.repo, review.number, review.head_sha, body, ())

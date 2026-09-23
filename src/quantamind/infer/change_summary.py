@@ -111,12 +111,13 @@ def summarise(
     gcloud: str = "gcloud",
     location: str = "us-central1",
     route: ModelRoute | None = None,
+    model: str = vertex.MODEL,
 ) -> Summary:
     """Ask the model what changed and whether it matches the author's stated purpose."""
     if not diff.strip():
         raise vertex.InferenceFailed("no diff to summarise")
     url, auth = vertex.endpoint(
-        route, project=project, location=location, model=vertex.MODEL, gcloud=gcloud
+        route, project=project, location=location, model=model, gcloud=gcloud
     )
     goal = stated.text() or "(the author wrote no description)"
     # **AN EMPTY LIST IS SAID IN WORDS, NOT LEFT AS A BLANK.** A blank section reads to a

@@ -83,6 +83,7 @@ def explain(
             conventions=written(clone, head_sha),
             gcloud=settings.gcloud_path,
             route=route,
+            model=settings.model,
         )
     except (InferenceFailed, Unavailable, DiffReadFailed) as exc:
         # **THE REASON IS RETURNED, NOT ONLY LOGGED.** A delivery hit MAX_TOKENS, the summary was
