@@ -140,7 +140,7 @@ nothing model-decided can reach our blocking verdict, and that we publish the pr
 | **Free** | **Team** | **Enterprise** |
 |---|---|---|
 | **$0** | **$29** | **from $60** |
-| ≤ 10 developers | unlimited | unlimited |
+| public repositories | per seat · 15 reviews a seat / month · $1 each after | per seat · metered |
 
 **Inference is 4–7% of the price** — $1.20–$2.00 per developer per month against $29, measured on
 68 billed requests. **The enforcement half runs no model at all.**

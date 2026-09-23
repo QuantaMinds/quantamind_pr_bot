@@ -314,7 +314,7 @@ happened twice in this repository's own tooling.
 ## What it costs
 
 Free tier — ranking, structural checks, coverage line — costs us compute and nothing else. No
-key, unlimited seats and repositories.
+key, no seat, no credit; public repositories.
 
 Paid tier, per pull request, at list prices:
 

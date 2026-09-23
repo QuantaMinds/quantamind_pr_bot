@@ -23,8 +23,8 @@ the tier arithmetic are internal and live in `unit-economics.md` — do not merg
 |  | **Free** | **Team** | **Enterprise** |
 |---|---|---|---|
 |  | **$0** | **$29** per developer / month | **from $60** per developer / month |
-|  | up to 10 developers | unlimited | unlimited |
-|  | Your rules, enforced on every pull request | Everything in Free, across your whole team | Everything in Team, plus the controls procurement asks for |
+|  | public repositories | per seat · 15 reviews a seat each month | per seat · metered |
+|  | Your rules, enforced on every pull request | Everything in Free, plus private repositories and the full review | Everything in Team, plus the controls procurement asks for |
 
 ---
 
@@ -59,12 +59,22 @@ your host will not enforce it.
 
 ## What it is for
 
-**Free — your rules, enforced.** Everything a team needs to hold itself to the rules it has
-written down, at no cost, with no expiry. Up to ten developers.
+**Free — your rules, enforced, on public repositories.** Everything a team needs to hold itself to
+the rules it has written down, at no cost, with no expiry. It runs the half that needs no model:
+the ranking and the declared rules. Private repositories are on a paid plan.
 
-**Team — $29 per developer, per month.** The same across an unlimited team, with the full
-recorded history and a report on every repository. **That is less than twenty minutes of one
-engineer's time a month.** It is a fair bar to hold us to, and it is the one we would use.
+**Team — $29 per seat, per month.** Private repositories and the full review, which includes the
+model half. **That is less than twenty minutes of one engineer's time a month.** It is a fair bar
+to hold us to, and it is the one we would use.
+
+A seat is a developer who opens a pull request: the first one assigns them a seat while a paid seat
+is free, and it stays theirs until an admin removes it. Each seat brings **15 full reviews a
+month**, pooled across the team — one review is one commit — and they reset each billing period.
+Beyond that, credits are **$1 each and never expire**. When both run out the reviews pause and say
+so on the pull request; nothing is charged without you asking for it.
+
+**Bring your own model key — $26 per seat.** Reviews run on your Gemini key, so they use no credits
+and are not capped. The key is checked before it is saved, stored encrypted, and never shown again.
 
 **Enterprise — from $60 per developer, per month.** For organisations where the question is not
 whether the tool works but whether it is allowed: one standard across every repository, deployment
@@ -93,6 +103,16 @@ against, and it is used for nothing else.
 
 **Is the free tier a trial?**
 No. It does not expire and it does not degrade. **We would not claim that as a differentiator** —
-CodeRabbit and Greptile both run permanent free tiers too, and theirs carry no seat limit where
-ours stops at ten developers. Ours is here so a team can start keeping a record today, not because
-it is more generous than everyone else's.
+CodeRabbit and Greptile both run permanent free tiers too. Ours is here so a team can start keeping
+a record today, not because it is more generous than everyone else's. It covers public
+repositories and runs the model-free half; private repositories and the full review are paid.
+
+**What happens when the credits run out?**
+The pull request gets a comment saying so and naming the date they reset. Nothing is charged
+automatically and no review runs that you did not pay for. An admin can buy more at any time, and
+bought credits do not expire.
+
+**What if a review fails, or has nothing to say?**
+The credit goes back. A credit is only kept when a review reached the pull request AND the model
+answered — a duplicate, an outage, an empty result or a crash are all refunded, into the same pool
+they came from.

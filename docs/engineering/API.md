@@ -246,7 +246,15 @@ still reviews.
 ## `POST /entitlement`
 
 **The billing service telling us what an account is entitled to.** `server/` owns Stripe; this
-route is how the result reaches the reviewer. It writes entitlement and nothing else — no
+route is how the result reaches the reviewer.
+
+**It is the only billing route this service ANSWERS, and no longer the only billing traffic.**
+Since seats and credits, the reviewer also CALLS the billing service once per pull request —
+`POST /billing/review/authorize` before anything is cloned, and `POST /billing/review/settle`
+when the outcome is known (`ingest/billing/review_gate.py`, same bearer, `Destination.BILLING`).
+What arrives here is still what that service last pushed, and it is what decides a review when the
+outbound call cannot be made: see `docs/engineering/STRIPE.md`, "Seats and credits, asked on every
+pull request". It writes entitlement and nothing else — no
 provisioning, no warming, no clone, because a push arrives on every subscription change and a route
 that cloned on each would turn a billing webhook into a fleet of git operations.
 

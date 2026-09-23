@@ -87,12 +87,21 @@ already tolerates.
 | compliance table `D5`, audit trail `D4b` | 30 days | full history | full history |
 | local + pre-PR review `E1`–`E3` | yes | yes | yes |
 | web dashboard, cost view | yes | yes | yes |
-| model reviewer | — | fair use 40/dev/mo | uncapped, metered |
+| model reviewer | — | 15 reviews per seat / month, $1 each after | metered |
 | cross-repo standards `D1e` | — | — | yes |
 | SSO, self-host, residency, DPA, SLA | — | — | yes |
 | **COGS at the cap** | **UNDECIDED — see below** | **$3.20–4.00** | metered |
 | **gross margin** | n/a | **86% at cap, ~94% typical** | negotiated |
-| seats | ≤10 contributors | unlimited | unlimited |
+| seats | public repositories, no seat | per seat, assigned on first pull request | per seat |
+
+**BUILT 2026-09-22 — THE GATE THE CORRECTION BELOW SAYS WAS MISSING NOW EXISTS.**
+`serve/review/gate.py` decides every pull request before anything is cloned: an unpaid account gets
+the model-free review on a public repository and nothing on a private one, and a paid one spends a
+credit per reviewed commit (`serve/review/admission.py`, and the billing service's
+`admission.ts`). So "free is model-free" is now enforced rather than intended, and the model cost
+is metered per review rather than capped by fair use. **The correction below is left as written**:
+it was true for the eleven days it stood, and a correction log that is edited to match what
+happened later stops being evidence.
 
 **CORRECTED 2026-09-11 — "FREE IS MODEL-FREE" IS A DESIGN, NOT A BUILT GATE, AND THE TABLE ABOVE
 PRICED IT AS BUILT.** `serve/review/review_delivery.py` calls `examine()` on every reviewable
